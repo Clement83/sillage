@@ -1,0 +1,142 @@
+package io.github.clement83.sillage.singletrack
+
+import android.content.Context
+import androidx.work.BackoffPolicy
+import androidx.work.Constraints
+import androidx.work.CoroutineWorker
+import androidx.work.ExistingWorkPolicy
+import androidx.work.NetworkType
+import androidx.work.OneTimeWorkRequestBuilder
+import androidx.work.WorkManager
+import androidx.work.WorkerParameters
+import androidx.work.workDataOf
+import io.github.clement83.sillage.R
+import io.github.clement83.sillage.SillageApp
+import io.github.clement83.sillage.data.OutingDao
+import io.github.clement83.sillage.data.RecordingDao
+import io.github.clement83.sillage.data.RecordingEntity
+import io.github.clement83.sillage.data.UploadState
+import io.github.clement83.sillage.export.ExportTrack
+import io.github.clement83.sillage.export.ExportWaypoint
+import io.github.clement83.sillage.export.TrackExport
+import java.util.concurrent.TimeUnit
+
+/**
+ * Sends a ride to its singletrack outing (#1731), through WorkManager: it waits for the network,
+ * survives the app being closed, and retries. The state shown to the user is in the recording row.
+ */
+class RideUploads(
+    private val context: Context,
+    private val recordings: RecordingDao,
+    private val outings: OutingDao,
+    private val accounts: AccountStore,
+    private val repository: OutingRepository,
+    private val client: SingletrackClient,
+) {
+    private val work get() = WorkManager.getInstance(context)
+
+    /** How the ride would be sent, or null when it cannot be (no outing, no personal link, no account). */
+    suspend fun target(recording: RecordingEntity): RideTarget? {
+        val outing = recording.outingId?.let { outings.get(it) } ?: return null
+        outing.inviteToken?.let { return RideTarget.Guest(outing.server, it) }
+        val account = accounts.current()?.takeIf { it.server == outing.server } ?: return null
+        return RideTarget.Account(account.server, account.token, outing.remoteId)
+    }
+
+    /** At the end of a ride on an outing: sent without asking when an account is paired, after [AUTO_DELAY_MS] to allow cancelling. */
+    suspend fun autoSend(recordingId: Long) {
+        val recording = recordings.get(recordingId) ?: return
+        val outing = recording.outingId?.let { outings.get(it) } ?: return
+        if (accounts.current()?.server != outing.server || target(recording) == null) return
+        send(recordingId, AUTO_DELAY_MS)
+    }
+
+    /** Queues the upload (or a new attempt); it starts as soon as the network is there. */
+    suspend fun send(recordingId: Long, delayMs: Long = 0) {
+        recordings.setUpload(recordingId, UploadState.QUEUED.name)
+        val request = OneTimeWorkRequestBuilder<RideUploadWorker>()
+            .setInputData(workDataOf(KEY_RECORDING to recordingId))
+            .setInitialDelay(delayMs, TimeUnit.MILLISECONDS)
+            .setConstraints(Constraints.Builder().setRequiredNetworkType(NetworkType.CONNECTED).build())
+            .setBackoffCriteria(BackoffPolicy.EXPONENTIAL, 30, TimeUnit.SECONDS)
+            .build()
+        work.enqueueUniqueWork(workName(recordingId), ExistingWorkPolicy.REPLACE, request)
+    }
+
+    /** Cancels a queued upload that has not left yet. */
+    suspend fun cancel(recordingId: Long) {
+        work.cancelUniqueWork(workName(recordingId))
+        recordings.setUpload(recordingId, UploadState.CANCELLED.name)
+    }
+
+    /** One attempt, run by [RideUploadWorker]. True when done (sent or failed for good), false to retry. */
+    internal suspend fun attempt(recordingId: Long): Boolean {
+        val recording = recordings.get(recordingId) ?: return true
+        if (recording.uploadState != UploadState.QUEUED) return true
+        val target = target(recording) ?: return fail(recordingId, ERROR_NO_ACCESS)
+        val gpx = gpx(recording).toByteArray()
+        val name = TrackExport.fileName(recording.startedAt, recording.title, "gpx")
+        return when (val r = client.uploadRide(target, gpx, name)) {
+            is ApiResult.Ok -> {
+                recordings.setUpload(recordingId, UploadState.SENT.name, uploadedAt = System.currentTimeMillis())
+                true
+            }
+            ApiResult.NotFound -> fail(recordingId, ERROR_NOT_FOUND)
+            ApiResult.Unauthorized -> {
+                if (target is RideTarget.Account) repository.onUnauthorized()
+                fail(recordingId, ERROR_UNAUTHORIZED)
+            }
+            is ApiResult.Failed -> if (r.status >= 500) retry(recordingId) else fail(recordingId, r.error ?: "http_${r.status}")
+            ApiResult.TooManyRequests, is ApiResult.Offline -> retry(recordingId)
+        }
+    }
+
+    private suspend fun fail(recordingId: Long, error: String): Boolean {
+        recordings.setUpload(recordingId, UploadState.FAILED.name, error)
+        return true
+    }
+
+    private suspend fun retry(recordingId: Long): Boolean {
+        recordings.setUpload(recordingId, UploadState.QUEUED.name, ERROR_OFFLINE)
+        return false
+    }
+
+    private suspend fun gpx(recording: RecordingEntity): String {
+        val segments = recordings.points(recording.id).groupBy { it.segment }.toSortedMap().values
+            .map { seg -> seg.map { it.toFix() } }
+        val defaultName = context.getString(R.string.key_moment_default_name)
+        val outingTitle = recording.outingId?.let { outings.get(it) }?.title
+        return TrackExport.gpx(
+            ExportTrack(
+                name = recording.title ?: outingTitle ?: context.getString(R.string.app_name),
+                startedAt = recording.startedAt,
+                segments = segments,
+                waypoints = recordings.keyMoments(recording.id).mapIndexed { i, m ->
+                    ExportWaypoint(m.time, m.lat, m.lon, m.alt, m.label ?: defaultName.format(i + 1))
+                },
+            ),
+        )
+    }
+
+    companion object {
+        /** Time left to cancel an automatic upload. */
+        const val AUTO_DELAY_MS = 60_000L
+        internal const val KEY_RECORDING = "recording_id"
+
+        const val ERROR_OFFLINE = "offline"
+        const val ERROR_NOT_FOUND = "not_found"
+        const val ERROR_UNAUTHORIZED = "unauthorized"
+        const val ERROR_NO_ACCESS = "no_access"
+
+        private fun workName(recordingId: Long) = "ride-upload-$recordingId"
+    }
+}
+
+class RideUploadWorker(context: Context, params: WorkerParameters) : CoroutineWorker(context, params) {
+    override suspend fun doWork(): Result {
+        val id = inputData.getLong(RideUploads.KEY_RECORDING, -1)
+        if (id < 0) return Result.failure()
+        val rides = (applicationContext as SillageApp).container.rides
+        return if (rides.attempt(id)) Result.success() else Result.retry()
+    }
+}

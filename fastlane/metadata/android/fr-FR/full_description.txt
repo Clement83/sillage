@@ -1,0 +1,9 @@
+<p>Sillage enregistre tes sorties VTT sans réseau et garde tout sur ton téléphone.</p>
+<ul>
+<li>Enregistrement GPS en service de premier plan, écran éteint, rien n'est envoyé</li>
+<li>Moments clés en un tap, depuis la carte ou la notification, même téléphone verrouillé</li>
+<li>Carte et position par-dessus l'écran de verrouillage pendant l'enregistrement</li>
+<li>Export GPX et KML, avec les moments clés en waypoints</li>
+<li>En option : ouvrir les sorties d'un serveur singletrack par QR code et y envoyer ta trace</li>
+</ul>
+<p>Logiciel libre (GNU AGPL v3), sans Google Play Services.</p>

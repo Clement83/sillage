@@ -1,0 +1,9 @@
+<p>Sillage records your mountain-bike rides without any network and keeps everything on your phone.</p>
+<ul>
+<li>GPS recording in a foreground service, screen off, nothing sent anywhere</li>
+<li>Key moments in one tap, from the map or the notification, even with the phone locked</li>
+<li>Map and position over the lock screen while recording</li>
+<li>GPX and KML export, with key moments as waypoints</li>
+<li>Optional: open rides from a singletrack server by QR code, and send your track to the ride</li>
+</ul>
+<p>Free software (GNU AGPL v3), without Google Play Services.</p>
