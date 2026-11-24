@@ -40,7 +40,6 @@ import androidx.compose.ui.text.input.KeyboardCapitalization
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import io.github.clement83.sillage.R
-import io.github.clement83.sillage.settings.ServerUrl
 import io.github.clement83.sillage.singletrack.ApiResult
 import io.github.clement83.sillage.ui.Format
 import io.github.clement83.sillage.ui.appContainer
@@ -58,7 +57,7 @@ fun AccountScreen(qrServer: String?, qrCode: String?, onBack: () -> Unit, onScan
     val container = appContainer()
     val repository = container.outings
     val account by container.account.account.collectAsStateWithLifecycle(initialValue = null)
-    val settingsServer by container.settings.serverUrl.collectAsStateWithLifecycle(initialValue = ServerUrl.DEFAULT)
+    val settingsServer by container.settings.serverUrl.collectAsStateWithLifecycle(initialValue = null)
     val scope = rememberCoroutineScope()
     var code by rememberSaveable { mutableStateOf("") }
     var busy by remember { mutableStateOf(false) }
@@ -113,7 +112,10 @@ fun AccountScreen(qrServer: String?, qrCode: String?, onBack: () -> Unit, onScan
             } else {
                 val server = qrServer ?: settingsServer
                 Text(stringResource(R.string.account_how), style = MaterialTheme.typography.bodyMedium)
-                Text(stringResource(R.string.account_server, server), style = MaterialTheme.typography.bodyMedium)
+                Text(
+                    if (server != null) stringResource(R.string.account_server, server) else stringResource(R.string.account_no_server),
+                    style = MaterialTheme.typography.bodyMedium,
+                )
                 Text(
                     stringResource(R.string.account_server_hint),
                     style = MaterialTheme.typography.bodySmall,
@@ -130,12 +132,12 @@ fun AccountScreen(qrServer: String?, qrCode: String?, onBack: () -> Unit, onScan
                     singleLine = true,
                     isError = error != null,
                     keyboardOptions = KeyboardOptions(capitalization = KeyboardCapitalization.Characters, imeAction = ImeAction.Done),
-                    keyboardActions = KeyboardActions(onDone = { if (code.length == CODE_LENGTH) pair(server, code) }),
+                    keyboardActions = KeyboardActions(onDone = { if (server != null && code.length == CODE_LENGTH) pair(server, code) }),
                     modifier = Modifier.fillMaxWidth(),
                 )
                 error?.let { Text(stringResource(it), color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodyMedium) }
                 Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                    Button(onClick = { pair(server, code) }, enabled = !busy && code.length == CODE_LENGTH) {
+                    Button(onClick = { server?.let { pair(it, code) } }, enabled = !busy && server != null && code.length == CODE_LENGTH) {
                         Text(stringResource(R.string.account_pair))
                     }
                     if (busy) {

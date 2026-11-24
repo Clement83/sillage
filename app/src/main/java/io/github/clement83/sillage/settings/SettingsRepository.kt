@@ -16,10 +16,18 @@ class SettingsRepository(context: Context) {
 
     private val store = context.applicationContext.dataStore
 
-    val serverUrl: Flow<String> = store.data.map { it[SERVER_URL] ?: ServerUrl.DEFAULT }
+    /** The singletrack server typed by the user or set by a pairing QR code; none until then. */
+    val serverUrl: Flow<String?> = store.data.map { it[SERVER_URL] }
 
-    /** Saves the address if it is valid; returns the stored canonical form, or null if rejected. */
+    /**
+     * Saves the address if it is valid and returns its canonical form, or null if rejected. A blank
+     * address forgets the server and returns "".
+     */
     suspend fun setServerUrl(input: String): String? {
+        if (input.isBlank()) {
+            store.edit { it.remove(SERVER_URL) }
+            return ""
+        }
         val url = ServerUrl.normalize(input) ?: return null
         store.edit { it[SERVER_URL] = url }
         return url
@@ -32,8 +40,24 @@ class SettingsRepository(context: Context) {
         store.edit { it[LOCK_SCREEN_MAP] = enabled }
     }
 
+    /** Show the downloaded map instead of OpenTopoMap, even with network (#1729). */
+    val offlineFirst: Flow<Boolean> = store.data.map { it[OFFLINE_FIRST] ?: false }
+
+    suspend fun setOfflineFirst(enabled: Boolean) {
+        store.edit { it[OFFLINE_FIRST] = enabled }
+    }
+
+    /** Download offline maps over mobile data too, not only Wi-Fi (#1729). Off by default. */
+    val offlineMobileData: Flow<Boolean> = store.data.map { it[OFFLINE_MOBILE_DATA] ?: false }
+
+    suspend fun setOfflineMobileData(enabled: Boolean) {
+        store.edit { it[OFFLINE_MOBILE_DATA] = enabled }
+    }
+
     private companion object {
         val SERVER_URL = stringPreferencesKey("server_url")
         val LOCK_SCREEN_MAP = booleanPreferencesKey("lock_screen_map")
+        val OFFLINE_FIRST = booleanPreferencesKey("offline_first")
+        val OFFLINE_MOBILE_DATA = booleanPreferencesKey("offline_mobile_data")
     }
 }

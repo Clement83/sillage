@@ -16,8 +16,8 @@ Développée sur le poste de Clément (pas d'agentRunner). Le board Kanboard ser
 - **AGPL v3**, dépôt public. Aucun secret, aucune adresse privée dans le dépôt.
 - `applicationId` = `io.github.clement83.sillage`, **à ne jamais changer** (F-Droid le traiterait
   comme une nouvelle app).
-- URL du serveur singletrack configurable (défaut `https://singletrack.quintard.me`), jamais codée en dur
-  ailleurs que dans `ServerUrl.DEFAULT`.
+- Aucun serveur singletrack par défaut, aucune adresse de serveur codée en dur dans l'app : l'URL vient
+  des Réglages, d'un QR d'association ou du lien d'une sortie.
 - OpenTopoMap en affichage seulement : **jamais de préchargement en masse** (conditions d'usage).
 
 ## Stack

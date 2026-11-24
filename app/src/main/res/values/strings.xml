@@ -17,12 +17,10 @@
 
     <string name="settings_title">Settings</string>
     <string name="settings_server_title">singletrack server</string>
-    <string name="settings_server_body">The singletrack instance Sillage talks to. Only needed for rides and accounts, never for recording.</string>
     <string name="settings_server_label">Server URL</string>
     <string name="settings_server_invalid">Enter an http:// or https:// address</string>
     <string name="settings_server_saved">Server saved</string>
     <string name="settings_save">Save</string>
-    <string name="settings_reset">Default</string>
     <string name="settings_language_title">Language</string>
     <string name="settings_language_system">Phone language</string>
     <string name="settings_language_en" translatable="false">English</string>
@@ -82,7 +80,6 @@
     <string name="lock_unlock">Unlock</string>
     <string name="settings_lockscreen_title">Lock screen</string>
     <string name="settings_lockscreen_switch">Show the map over the lock screen while recording</string>
-    <string name="settings_lockscreen_body">Press the power button to see where you are and drop key moments without unlocking. Anyone holding the phone can then see the map; settings, history and exports still need unlocking.</string>
     <string name="nav_tracks">Tracks</string>
     <string name="tracks_title">Imported tracks</string>
     <string name="tracks_empty">No tracks yet. Import a GPX, KML or KMZ file, or share one to Sillage from another app.</string>
@@ -148,6 +145,7 @@
     <string name="account_title">singletrack account</string>
     <string name="account_how">On singletrack, open My account › Android app › Pair the app, then scan the QR code or type the code shown (valid 5 minutes).</string>
     <string name="account_server">Server: %1$s</string>
+    <string name="account_no_server">Server: none yet</string>
     <string name="account_server_hint">The server can be changed in Settings.</string>
     <string name="account_code_label">Code (6 characters)</string>
     <string name="account_scan">Scan the QR code</string>
@@ -159,7 +157,7 @@
     <string name="account_paired_done">Account paired</string>
     <string name="account_unpair">Unpair</string>
     <string name="account_unpair_body">The app forgets your account and the outings only it could see. To revoke it on singletrack too, use My account › Android app.</string>
-    <string name="settings_account_unpaired">No account paired. The app works without one.</string>
+    <string name="settings_account_unpaired">No account paired.</string>
     <string name="settings_account_manage">Manage</string>
     <string name="ride_outing">Outing: %1$s</string>
     <string name="ride_send">Send to the outing</string>
@@ -180,4 +178,33 @@
         <item quantity="one">%d rider going</item>
         <item quantity="other">%d riders going</item>
     </plurals>
+    <!-- Offline maps (#1729) -->
+    <string name="offline_title">Offline maps</string>
+    <string name="offline_channel">Offline map downloads</string>
+    <string name="offline_downloading">Downloading the map: %1$s</string>
+    <string name="offline_used">%1$s used on this phone</string>
+    <string name="offline_on_phone">On this phone</string>
+    <string name="offline_regions">Available regions</string>
+    <string name="offline_none_offered">Your server offers no offline map yet.</string>
+    <string name="offline_unreachable">Server unreachable.</string>
+    <string name="offline_download">Download</string>
+    <string name="offline_download_outing">Download the map of this ride</string>
+    <string name="offline_confirm_title">Download %1$s?</string>
+    <string name="offline_confirm_size">About %1$s.</string>
+    <string name="offline_confirm_wifi">Over Wi-Fi only.</string>
+    <string name="offline_state_waiting_wifi">Waiting for Wi-Fi</string>
+    <string name="offline_state_waiting">Waiting for network</string>
+    <string name="offline_state_downloading">Downloading… %1$d %%</string>
+    <string name="offline_state_ready">Ready · %1$s</string>
+    <string name="offline_error_gone">No longer offered by the server</string>
+    <string name="offline_error_account">Account no longer paired</string>
+    <string name="offline_error_no_route">This ride has no route</string>
+    <string name="offline_error_other">Download failed</string>
+    <string name="offline_update_available">Update available</string>
+    <string name="offline_update">Update</string>
+    <string name="offline_delete">Delete</string>
+    <string name="offline_delete_title">Delete %1$s?</string>
+    <string name="offline_mobile_data">Also download over mobile data</string>
+    <string name="offline_first">Show the downloaded map even with network</string>
+    <string name="offline_ready_outing">Offline map ready</string>
 </resources>

@@ -187,3 +187,31 @@ data class ImportedWaypointEntity(
     val lon: Double,
     val alt: Double?,
 )
+
+enum class ZoneKind { REGION, OUTING }
+
+enum class ZoneState { QUEUED, DOWNLOADING, READY, FAILED }
+
+/**
+ * A downloaded offline map area (#1729): a whole region of the server's catalogue, or the corridor
+ * around an outing's route. Its tiles live in the offline MBTiles files, not in this database.
+ */
+@Entity(tableName = "offline_zone")
+data class OfflineZoneEntity(
+    @PrimaryKey(autoGenerate = true) val id: Long = 0,
+    val kind: ZoneKind,
+    val name: String,
+    val server: String,
+    @ColumnInfo(name = "region_id") val regionId: String,
+    /** Pack version of the tiles on the phone; the catalogue's newer one means an update. */
+    val version: String,
+    /** Local outing whose route gives the corridor ([ZoneKind.OUTING]). */
+    @ColumnInfo(name = "outing_id") val outingId: Long? = null,
+    val state: ZoneState,
+    @ColumnInfo(name = "done_tiles") val doneTiles: Int = 0,
+    @ColumnInfo(name = "total_tiles") val totalTiles: Int = 0,
+    val bytes: Long = 0,
+    val error: String? = null,
+    @ColumnInfo(name = "created_at") val createdAt: Long,
+    @ColumnInfo(name = "updated_at") val updatedAt: Long,
+)

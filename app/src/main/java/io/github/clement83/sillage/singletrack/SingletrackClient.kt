@@ -1,5 +1,6 @@
 package io.github.clement83.sillage.singletrack
 
+import io.github.clement83.sillage.offline.OfflineCatalog
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import kotlinx.serialization.KSerializer
@@ -94,6 +95,74 @@ class SingletrackClient(
         return when (val r = call(request(url, bearer).post(body).build(), String.serializer(), expectJson = false)) {
             is ApiResult.Ok -> ApiResult.Ok(Unit)
             else -> r.cast()
+        }
+    }
+
+    /** The regions the server offers for offline use (#1739). Account token only. */
+    suspend fun offlineCatalog(server: String, appToken: String): ApiResult<OfflineCatalog> =
+        get(url(server, "api/app/offline"), appToken, OfflineCatalog.serializer())
+
+    /** The offline MapLibre style of [regionId]: its layers are reused over the local tiles. */
+    suspend fun offlineStyle(server: String, appToken: String, regionId: String): ApiResult<String> {
+        val url = url(server, "api/app/offline", "style.json")?.newBuilder()?.addQueryParameter("region", regionId)?.build()
+            ?: return badServer()
+        return call(request(url, appToken).get().build(), String.serializer(), expectJson = false)
+    }
+
+    /**
+     * Bytes [offset] to [offset] + [length] - 1 of an offline file (`<region>.pmtiles`), by HTTP range.
+     * Fewer bytes only when the file ends sooner.
+     */
+    suspend fun offlineRange(server: String, appToken: String, file: String, offset: Long, length: Long): ApiResult<ByteArray> {
+        val url = url(server, "api/app/offline", file) ?: return badServer()
+        val request = request(url, appToken)
+            .header("Accept", "*/*")
+            .header("Range", "bytes=$offset-${offset + length - 1}")
+            .get().build()
+        return withContext(Dispatchers.IO) {
+            try {
+                http.newCall(request).execute().use { r ->
+                    when (r.code) {
+                        206 -> {
+                            val bytes = r.body?.bytes() ?: return@use ApiResult.Offline(IOException("No body"))
+                            val total = r.header("Content-Range")?.substringAfterLast('/')?.toLongOrNull()
+                            val complete = bytes.size.toLong() == length ||
+                                (bytes.size < length && total != null && offset + bytes.size == total)
+                            if (complete) ApiResult.Ok(bytes) else ApiResult.Offline(IOException("Short range"))
+                        }
+                        401 -> ApiResult.Unauthorized
+                        404 -> ApiResult.NotFound
+                        429 -> ApiResult.TooManyRequests
+                        else -> ApiResult.Failed(r.code, null)
+                    }
+                }
+            } catch (e: IOException) {
+                ApiResult.Offline(e)
+            }
+        }
+    }
+
+    /** A plain GET of public bytes (relief tiles), capped at [MAX_BODY_BYTES]. */
+    suspend fun download(url: String): ApiResult<ByteArray> {
+        val u = url.toHttpUrlOrNull() ?: return badServer()
+        val request = Request.Builder().url(u).header("User-Agent", userAgent).get().build()
+        return withContext(Dispatchers.IO) {
+            try {
+                http.newCall(request).execute().use { r ->
+                    when {
+                        r.isSuccessful -> {
+                            val source = r.body?.source() ?: return@use ApiResult.Offline(IOException("No body"))
+                            if (source.request(MAX_BODY_BYTES + 1)) ApiResult.Offline(IOException("Too large"))
+                            else ApiResult.Ok(source.buffer.readByteArray())
+                        }
+                        r.code == 404 || r.code == 403 -> ApiResult.NotFound
+                        r.code == 429 -> ApiResult.TooManyRequests
+                        else -> ApiResult.Failed(r.code, null)
+                    }
+                }
+            } catch (e: IOException) {
+                ApiResult.Offline(e)
+            }
         }
     }
 

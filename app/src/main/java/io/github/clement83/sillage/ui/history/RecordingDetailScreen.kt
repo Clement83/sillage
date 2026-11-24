@@ -60,7 +60,6 @@ import io.github.clement83.sillage.export.ExportWaypoint
 import io.github.clement83.sillage.export.TrackExport
 import io.github.clement83.sillage.geo.Fix
 import io.github.clement83.sillage.map.MapLibreView
-import io.github.clement83.sillage.map.MapStyles
 import io.github.clement83.sillage.map.TrackLayers
 import io.github.clement83.sillage.map.awaitMap
 import io.github.clement83.sillage.map.awaitStyle
@@ -78,6 +77,7 @@ private const val MOMENTS_SOURCE = "detail-moments"
 @Composable
 fun RecordingDetailScreen(recordingId: Long, onBack: () -> Unit) {
     val dao = appContainer().database.recordings()
+    val baseStyle = appContainer().offline.baseStyle
     val scope = rememberCoroutineScope()
     val flow = remember(recordingId) { dao.observe(recordingId) }
     val recording by flow.collectAsStateWithLifecycle(initialValue = null)
@@ -150,10 +150,12 @@ fun RecordingDetailScreen(recordingId: Long, onBack: () -> Unit) {
     LaunchedEffect(mapView) {
         val m = mapView.awaitMap()
         m.uiSettings.isRotateGesturesEnabled = false
-        val s = m.awaitStyle(MapStyles.OPEN_TOPO_MAP)
-        TrackLayers.ensureLine(s, TRACK_SOURCE, trackColor, width = 4f)
-        TrackLayers.ensurePoints(s, MOMENTS_SOURCE, trackColor)
-        style = s
+        baseStyle.collect { json ->
+            val s = m.awaitStyle(json)
+            TrackLayers.ensureLine(s, TRACK_SOURCE, trackColor, width = 4f)
+            TrackLayers.ensurePoints(s, MOMENTS_SOURCE, trackColor)
+            style = s
+        }
     }
     LaunchedEffect(style, moments) {
         val s = style ?: return@LaunchedEffect

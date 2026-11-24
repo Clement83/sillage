@@ -42,7 +42,6 @@ import io.github.clement83.sillage.R
 import io.github.clement83.sillage.geo.TrackShape
 import io.github.clement83.sillage.importer.TrackGeometry
 import io.github.clement83.sillage.map.MapLibreView
-import io.github.clement83.sillage.map.MapStyles
 import io.github.clement83.sillage.map.TrackLayers
 import io.github.clement83.sillage.map.awaitMap
 import io.github.clement83.sillage.map.awaitStyle
@@ -84,10 +83,12 @@ fun TrackDetailScreen(trackId: Long, onBack: () -> Unit, onFollow: () -> Unit) {
     LaunchedEffect(mapView) {
         val m = mapView.awaitMap()
         m.uiSettings.isRotateGesturesEnabled = false
-        val s = m.awaitStyle(MapStyles.OPEN_TOPO_MAP)
-        TrackLayers.ensureGradedLine(s, TRACK_SOURCE, width = 5f)
-        TrackLayers.ensurePoints(s, WAYPOINTS_SOURCE, waypointColor)
-        style = s
+        container.offline.baseStyle.collect { json ->
+            val s = m.awaitStyle(json)
+            TrackLayers.ensureGradedLine(s, TRACK_SOURCE, width = 5f)
+            TrackLayers.ensurePoints(s, WAYPOINTS_SOURCE, waypointColor)
+            style = s
+        }
     }
     LaunchedEffect(style, geometry) {
         val s = style ?: return@LaunchedEffect

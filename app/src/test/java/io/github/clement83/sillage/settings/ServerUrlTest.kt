@@ -8,7 +8,7 @@ class ServerUrlTest {
 
     @Test
     fun `keeps a canonical https address`() {
-        assertEquals("https://singletrack.quintard.me", ServerUrl.normalize("https://singletrack.quintard.me"))
+        assertEquals("https://singletrack.example.org", ServerUrl.normalize("https://singletrack.example.org"))
     }
 
     @Test

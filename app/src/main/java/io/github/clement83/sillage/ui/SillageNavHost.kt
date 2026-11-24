@@ -44,6 +44,7 @@ import io.github.clement83.sillage.importer.ImportException
 import io.github.clement83.sillage.importer.ImportOutcome
 import io.github.clement83.sillage.ui.settings.SettingsScreen
 import io.github.clement83.sillage.singletrack.SingletrackLink
+import io.github.clement83.sillage.ui.offline.OfflineMapsScreen
 import io.github.clement83.sillage.ui.outings.AccountScreen
 import io.github.clement83.sillage.ui.outings.OpenLinkScreen
 import io.github.clement83.sillage.ui.outings.OutingScreen
@@ -248,8 +249,14 @@ fun SillageNavHost() {
                     onBack = { nav.popBackStack() },
                 )
             }
+            composable(OFFLINE_ROUTE) {
+                OfflineMapsScreen(onBack = { nav.popBackStack() })
+            }
             composable(TopLevel.Settings.route) {
-                SettingsScreen(onAccount = { nav.navigate(accountRoute(null, null)) })
+                SettingsScreen(
+                    onAccount = { nav.navigate(accountRoute(null, null)) },
+                    onOfflineMaps = { nav.navigate(OFFLINE_ROUTE) },
+                )
             }
         }
     }
@@ -262,6 +269,7 @@ private fun trackRoute(id: Long) = "track/$id"
 private fun outingRoute(id: Long) = "outing/$id"
 
 private const val SCAN_ROUTE = "scan"
+private const val OFFLINE_ROUTE = "offline"
 private const val OPEN_ROUTE = "open?kind={kind}&server={server}&value={value}"
 private const val ACCOUNT_ROUTE = "account?server={server}&code={code}"
 
