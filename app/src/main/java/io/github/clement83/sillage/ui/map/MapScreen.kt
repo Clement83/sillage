@@ -48,7 +48,6 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import io.github.clement83.sillage.R
 import io.github.clement83.sillage.data.RecordingStatus
 import io.github.clement83.sillage.map.MapLibreView
-import io.github.clement83.sillage.map.MapStyles
 import io.github.clement83.sillage.map.TrackLayers
 import io.github.clement83.sillage.map.awaitMap
 import io.github.clement83.sillage.map.awaitStyle
@@ -104,6 +103,7 @@ fun MapScreen(onRecordingFinished: (Long) -> Unit, lockedMode: Boolean = false) 
     val trackColor = MaterialTheme.colorScheme.secondary.toArgb()
     val followedWaypointColor = MaterialTheme.colorScheme.primary.toArgb()
     val tracks = appContainer().tracks
+    val baseStyle = appContainer().offline.baseStyle
     var followed by remember { mutableStateOf<TrackGeometry?>(null) }
     val density = LocalDensity.current
     val attributionBottomPx = with(density) { 88.dp.roundToPx() }
@@ -140,14 +140,17 @@ fun MapScreen(onRecordingFinished: (Long) -> Unit, lockedMode: Boolean = false) 
             }
             c.target?.let { camera = listOf(it.latitude, it.longitude, c.zoom, if (tracking) 1.0 else 0.0) }
         }
-        val s = m.awaitStyle(MapStyles.OPEN_TOPO_MAP)
-        // Order matters: the followed track under the recorded one, markers on top.
-        TrackLayers.ensureGradedLine(s, FOLLOWED_SOURCE, width = 6f)
-        TrackLayers.ensureLine(s, RECORDING_SOURCE, trackColor, width = 4f)
-        TrackLayers.ensurePoints(s, FOLLOWED_WAYPOINTS_SOURCE, followedWaypointColor)
-        TrackLayers.ensurePoints(s, MOMENTS_SOURCE, trackColor)
-        style = s
         map = m
+        // A new base map (zone downloaded or deleted) means a new style: the layers go on again.
+        baseStyle.collect { json ->
+            val s = m.awaitStyle(json)
+            // Order matters: the followed track under the recorded one, markers on top.
+            TrackLayers.ensureGradedLine(s, FOLLOWED_SOURCE, width = 6f)
+            TrackLayers.ensureLine(s, RECORDING_SOURCE, trackColor, width = 4f)
+            TrackLayers.ensurePoints(s, FOLLOWED_WAYPOINTS_SOURCE, followedWaypointColor)
+            TrackLayers.ensurePoints(s, MOMENTS_SOURCE, trackColor)
+            style = s
+        }
     }
 
     LaunchedEffect(map, style, permission.granted) {

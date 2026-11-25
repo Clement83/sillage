@@ -47,6 +47,27 @@ class SingletrackClientTest {
     }
 
     @Test
+    fun `a ride becomes a solo outing with its client id`() = runBlocking {
+        server.enqueue(MockResponse().setResponseCode(201).setBody("""{"slug":"sortie-du-25","url":"https://example.org/s/sortie-du-25"}"""))
+        val r = client.soloOuting(base, "secret", "<gpx/>".toByteArray(), "ride.gpx", "c0ffee", "Sortie du 25", "2026-11-25T09:30:00+01:00")
+        assertEquals("sortie-du-25", (r as ApiResult.Ok).value.slug)
+        val request = server.takeRequest()
+        assertEquals("/api/app/rides", request.path)
+        assertEquals("POST", request.method)
+        assertEquals("Bearer secret", request.getHeader("Authorization"))
+        val body = request.body.readUtf8()
+        for (part in listOf("name=\"clientId\"", "c0ffee", "name=\"title\"", "Sortie du 25", "name=\"startedAt\"", "2026-11-25T09:30:00+01:00", "filename=\"ride.gpx\"", "<gpx/>")) {
+            assertTrue(part, part in body)
+        }
+    }
+
+    @Test
+    fun `a server without solo outings answers not found`() = runBlocking {
+        server.enqueue(MockResponse().setResponseCode(404))
+        assertEquals(ApiResult.NotFound, client.soloOuting(base, "secret", ByteArray(0), "r.gpx", "c", "t", "2026-11-25T09:30:00Z"))
+    }
+
+    @Test
     fun `account calls send the bearer token`() = runBlocking {
         server.enqueue(MockResponse().setBody("""{"outings":[{"id":"o1","role":"organizer","slug":"faron","title":"A","startsAt":"2026-11-24T08:46:40.000Z","unknownField":1}]}"""))
         val r = client.outings(base, "secret")

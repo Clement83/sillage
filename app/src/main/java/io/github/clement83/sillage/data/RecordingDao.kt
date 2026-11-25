@@ -51,6 +51,14 @@ interface RecordingDao {
     @Query("UPDATE recording SET upload_state = :state, upload_error = :error, uploaded_at = :uploadedAt WHERE id = :id")
     suspend fun setUpload(id: Long, state: String?, error: String? = null, uploadedAt: Long? = null)
 
+    /** Gives the ride its solo-outing key (#1766) once: a later call keeps the first one. */
+    @Query("UPDATE recording SET client_id = :clientId WHERE id = :id AND client_id IS NULL")
+    suspend fun setClientIdIfAbsent(id: Long, clientId: String)
+
+    /** Links the ride to the solo outing it became (#1766). */
+    @Query("UPDATE recording SET outing_id = :outingId WHERE id = :id")
+    suspend fun setOuting(id: Long, outingId: Long)
+
     @Query("DELETE FROM recording WHERE id = :id")
     suspend fun delete(id: Long)
 

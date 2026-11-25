@@ -4,8 +4,6 @@ import java.net.URI
 import java.net.URISyntaxException
 
 object ServerUrl {
-    const val DEFAULT = "https://singletrack.quintard.me"
-
     /**
      * Returns the canonical form of a singletrack server address typed by the user, or null if it
      * is not a usable http(s) URL. A missing scheme means https; trailing slashes are dropped.

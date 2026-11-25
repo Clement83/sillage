@@ -151,6 +151,13 @@ class OutingRepository(
         }
     }
 
+    /** Reads one of the account's own outings (a solo outing just made, #1766) and keeps it: its local id. */
+    suspend fun fetchOwn(server: String, token: String, slug: String): ApiResult<Long> =
+        when (val r = client.outing(server, token, slug)) {
+            is ApiResult.Ok -> ApiResult.Ok(save(server, r.value, detail = true, fromAccount = true))
+            else -> r.cast()
+        }
+
     /** "Unpair": forgets the token and the outings only the account could read. */
     suspend fun unpair() {
         accounts.clear()

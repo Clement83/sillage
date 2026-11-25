@@ -15,19 +15,23 @@ import androidx.room.RoomDatabase
         ImportedPointEntity::class,
         ImportedWaypointEntity::class,
         OutingEntity::class,
+        OfflineZoneEntity::class,
     ],
-    version = 4,
+    version = 6,
     exportSchema = true,
     autoMigrations = [
         AutoMigration(from = 1, to = 2),
         AutoMigration(from = 2, to = 3),
         AutoMigration(from = 3, to = 4),
+        AutoMigration(from = 4, to = 5),
+        AutoMigration(from = 5, to = 6),
     ],
 )
 abstract class SillageDatabase : RoomDatabase() {
     abstract fun recordings(): RecordingDao
     abstract fun tracks(): ImportedTrackDao
     abstract fun outings(): OutingDao
+    abstract fun offlineZones(): OfflineZoneDao
 
     companion object {
         fun create(context: Context): SillageDatabase =

@@ -3,6 +3,7 @@ package io.github.clement83.sillage
 import android.content.Context
 import io.github.clement83.sillage.data.SillageDatabase
 import io.github.clement83.sillage.importer.TrackLibrary
+import io.github.clement83.sillage.offline.OfflineMaps
 import io.github.clement83.sillage.recording.RecordingController
 import io.github.clement83.sillage.settings.SettingsRepository
 import kotlinx.coroutines.CoroutineScope
@@ -35,6 +36,7 @@ class AppContainer(context: Context) {
         followedTrackId = { recorder.state.value.takeIf { it.isActive }?.followedTrackId },
     )
     val rides = RideUploads(context.applicationContext, database.recordings(), database.outings(), account, outings, singletrack)
+    val offline = OfflineMaps(context.applicationContext, database.offlineZones(), account, singletrack, outings, settings)
 
     /** A singletrack link opened from outside (browser, message), waiting for the UI to open it. */
     val incomingLink = MutableStateFlow<SingletrackLink?>(null)

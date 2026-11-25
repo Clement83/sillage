@@ -9,12 +9,12 @@ class SingletrackLinkTest {
     @Test
     fun `ride and invitation pages`() {
         assertEquals(
-            SingletrackLink.Outing("https://singletrack.quintard.me", "coudon-du-dimanche"),
-            SingletrackLink.parse("https://singletrack.quintard.me/s/coudon-du-dimanche"),
+            SingletrackLink.Outing("https://singletrack.example.org", "coudon-du-dimanche"),
+            SingletrackLink.parse("https://singletrack.example.org/s/coudon-du-dimanche"),
         )
         assertEquals(
-            SingletrackLink.Invite("https://singletrack.quintard.me", "AbC123"),
-            SingletrackLink.parse("https://Singletrack.quintard.me/i/AbC123?utm=x#top"),
+            SingletrackLink.Invite("https://singletrack.example.org", "AbC123"),
+            SingletrackLink.parse("https://Singletrack.example.org/i/AbC123?utm=x#top"),
         )
     }
 
@@ -33,8 +33,8 @@ class SingletrackLinkTest {
     @Test
     fun `pairing QR`() {
         assertEquals(
-            SingletrackLink.Pair("https://singletrack.quintard.me", "K7Q2ZP"),
-            SingletrackLink.parse("singletrack://pair?server=https%3A%2F%2Fsingletrack.quintard.me&code=K7Q2ZP"),
+            SingletrackLink.Pair("https://singletrack.example.org", "K7Q2ZP"),
+            SingletrackLink.parse("singletrack://pair?server=https%3A%2F%2Fsingletrack.example.org&code=K7Q2ZP"),
         )
         assertNull(SingletrackLink.parse("singletrack://pair?code=K7Q2ZP"))
         assertNull(SingletrackLink.parse("singletrack://pair?server=https%3A%2F%2Fa.b"))
@@ -51,16 +51,16 @@ class SingletrackLinkTest {
     @Test
     fun `group join link of the outing QR`() {
         assertEquals(
-            SingletrackLink.Join("https://singletrack.quintard.me", "opn_42"),
-            SingletrackLink.parse("https://singletrack.quintard.me/s/opn_42/join"),
+            SingletrackLink.Join("https://singletrack.example.org", "opn_42"),
+            SingletrackLink.parse("https://singletrack.example.org/s/opn_42/join"),
         )
     }
 
     @Test
     fun `first singletrack link in a shared text`() {
         assertEquals(
-            SingletrackLink.Invite("https://singletrack.quintard.me", "tok"),
-            SingletrackLink.find("Sortie VTT samedi : https://singletrack.quintard.me/i/tok. À plus !"),
+            SingletrackLink.Invite("https://singletrack.example.org", "tok"),
+            SingletrackLink.find("Sortie VTT samedi : https://singletrack.example.org/i/tok. À plus !"),
         )
         assertEquals(null, SingletrackLink.find("rien à voir https://example.org/about"))
     }

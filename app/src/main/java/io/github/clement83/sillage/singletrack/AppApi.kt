@@ -111,6 +111,10 @@ data class PairResponse(val token: String)
 @Serializable
 data class ApiError(val error: String? = null)
 
+/** `POST /api/app/rides` (#1765): the private solo outing a ride became. */
+@Serializable
+data class SoloOutingResponse(val slug: String, val url: String? = null)
+
 /** GeoJSON LineString / MultiLineString to segments; unreadable positions are skipped. */
 internal fun segmentsOf(geometry: JsonObject): List<List<GeoPoint>> {
     val coordinates = geometry["coordinates"] as? JsonArray ?: return emptyList()

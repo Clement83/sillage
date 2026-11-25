@@ -46,7 +46,6 @@ import io.github.clement83.sillage.R
 import io.github.clement83.sillage.geo.ProfileSample
 import io.github.clement83.sillage.geo.TrackShape
 import io.github.clement83.sillage.map.MapLibreView
-import io.github.clement83.sillage.map.MapStyles
 import io.github.clement83.sillage.map.TrackLayers
 import io.github.clement83.sillage.map.awaitMap
 import io.github.clement83.sillage.map.awaitStyle
@@ -57,6 +56,7 @@ import io.github.clement83.sillage.singletrack.decode
 import io.github.clement83.sillage.singletrack.webUrl
 import io.github.clement83.sillage.ui.Format
 import io.github.clement83.sillage.ui.appContainer
+import io.github.clement83.sillage.ui.offline.OutingOfflineMap
 import io.github.clement83.sillage.ui.components.ElevationProfile
 import io.github.clement83.sillage.ui.openGeo
 import io.github.clement83.sillage.ui.openInBrowser
@@ -109,10 +109,12 @@ fun OutingScreen(outingId: Long, onBack: () -> Unit, onFollow: () -> Unit) {
     LaunchedEffect(mapView) {
         val m = mapView.awaitMap()
         m.uiSettings.isRotateGesturesEnabled = false
-        val s = m.awaitStyle(MapStyles.OPEN_TOPO_MAP)
-        TrackLayers.ensureGradedLine(s, ROUTE_SOURCE, width = 5f)
-        TrackLayers.ensurePoints(s, MEETING_SOURCE, meetingColor)
-        style = s
+        container.offline.baseStyle.collect { json ->
+            val s = m.awaitStyle(json)
+            TrackLayers.ensureGradedLine(s, ROUTE_SOURCE, width = 5f)
+            TrackLayers.ensurePoints(s, MEETING_SOURCE, meetingColor)
+            style = s
+        }
     }
     LaunchedEffect(style, segments, outing?.meeting) {
         val s = style ?: return@LaunchedEffect
@@ -189,6 +191,7 @@ fun OutingScreen(outingId: Long, onBack: () -> Unit, onFollow: () -> Unit) {
             if (profile.size >= 2) {
                 ElevationProfile(profile, markerDistanceM = null, modifier = Modifier.fillMaxWidth().height(56.dp))
             }
+            if (row != null && segments.isNotEmpty()) OutingOfflineMap(outingId, row.server, row.title)
             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 row?.webUrl(outing)?.let { url ->
                     OutlinedButton(onClick = { context.openInBrowser(url) }, modifier = Modifier.weight(1f)) {

@@ -4,6 +4,7 @@ import android.annotation.SuppressLint
 import android.content.Intent
 import android.os.PowerManager
 import android.provider.Settings
+import android.text.format.Formatter
 import androidx.appcompat.app.AppCompatDelegate
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
@@ -27,6 +28,7 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
@@ -47,15 +49,13 @@ import androidx.lifecycle.compose.LifecycleEventEffect
 import io.github.clement83.sillage.BuildConfig
 import io.github.clement83.sillage.R
 import io.github.clement83.sillage.SillageApp
-import io.github.clement83.sillage.settings.ServerUrl
 import io.github.clement83.sillage.ui.Format
 import io.github.clement83.sillage.ui.appContainer
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
-import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 
 @Composable
-fun SettingsScreen(onAccount: () -> Unit) {
+fun SettingsScreen(onAccount: () -> Unit, onOfflineMaps: () -> Unit) {
     val context = LocalContext.current
     val settings = remember { (context.applicationContext as SillageApp).container.settings }
     val scope = rememberCoroutineScope()
@@ -63,8 +63,18 @@ fun SettingsScreen(onAccount: () -> Unit) {
     var serverInput by rememberSaveable { mutableStateOf<String?>(null) }
     var serverError by rememberSaveable { mutableStateOf(false) }
     var serverSaved by rememberSaveable { mutableStateOf(false) }
+    // Follows the stored server (pairing sets it while this screen sits in the back stack); an edit in
+    // progress survives a rotation because the stored value it started from has not changed.
+    var serverShown by rememberSaveable { mutableStateOf<String?>(null) }
     LaunchedEffect(Unit) {
-        if (serverInput == null) serverInput = settings.serverUrl.first()
+        settings.serverUrl.collect { stored ->
+            val value = stored.orEmpty()
+            if (serverInput == null || value != serverShown) {
+                serverInput = value
+                serverError = false
+            }
+            serverShown = value
+        }
     }
 
     fun save(value: String) = scope.launch {
@@ -81,7 +91,6 @@ fun SettingsScreen(onAccount: () -> Unit) {
         Text(stringResource(R.string.settings_title), style = MaterialTheme.typography.headlineSmall)
 
         Section(R.string.settings_server_title) {
-            Text(stringResource(R.string.settings_server_body), style = MaterialTheme.typography.bodyMedium)
             OutlinedTextField(
                 value = serverInput.orEmpty(),
                 onValueChange = {
@@ -101,13 +110,13 @@ fun SettingsScreen(onAccount: () -> Unit) {
                 modifier = Modifier.fillMaxWidth(),
             )
             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp, Alignment.End)) {
-                OutlinedButton(onClick = { save(ServerUrl.DEFAULT) }) { Text(stringResource(R.string.settings_reset)) }
                 Button(onClick = { save(serverInput.orEmpty()) }) { Text(stringResource(R.string.settings_save)) }
             }
         }
 
         HorizontalDivider()
         AccountSection(onAccount)
+        OfflineSection(onOfflineMaps)
 
         HorizontalDivider()
         LockScreenSection()
@@ -141,6 +150,30 @@ private fun AccountSection(onAccount: () -> Unit) {
     }
 }
 
+/** Offline maps (#1729): only with a paired account, or once something is downloaded. */
+@Composable
+private fun OfflineSection(onOfflineMaps: () -> Unit) {
+    val container = appContainer()
+    val context = LocalContext.current
+    val account by container.account.account.collectAsStateWithLifecycle(initialValue = null)
+    val zones by container.offline.zones.collectAsStateWithLifecycle(initialValue = emptyList())
+    if (account == null && zones.isEmpty()) return
+    var used by remember { mutableLongStateOf(0L) }
+    LaunchedEffect(zones) { used = container.offline.sizeOnDisk() }
+    HorizontalDivider()
+    Section(R.string.offline_title) {
+        if (zones.isNotEmpty()) {
+            Text(
+                stringResource(R.string.offline_used, Formatter.formatShortFileSize(context, used)),
+                style = MaterialTheme.typography.bodyMedium,
+            )
+        }
+        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
+            OutlinedButton(onClick = onOfflineMaps) { Text(stringResource(R.string.settings_account_manage)) }
+        }
+    }
+}
+
 @Composable
 private fun LockScreenSection() {
     val settings = appContainer().settings
@@ -155,11 +188,6 @@ private fun LockScreenSection() {
             )
             Switch(checked = enabled, onCheckedChange = { scope.launch { settings.setLockScreenMap(it) } })
         }
-        Text(
-            stringResource(R.string.settings_lockscreen_body),
-            style = MaterialTheme.typography.bodySmall,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-        )
     }
 }
 
