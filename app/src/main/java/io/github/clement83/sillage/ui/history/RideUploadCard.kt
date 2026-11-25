@@ -7,10 +7,13 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.outlined.Send
+import androidx.compose.material.icons.outlined.Flag
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
@@ -19,6 +22,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -26,11 +30,13 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import androidx.core.net.toUri
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import io.github.clement83.sillage.R
 import io.github.clement83.sillage.data.RecordingEntity
 import io.github.clement83.sillage.data.UploadState
 import io.github.clement83.sillage.singletrack.RideUploads
+import io.github.clement83.sillage.singletrack.SoloOutings
 import io.github.clement83.sillage.singletrack.webUrl
 import io.github.clement83.sillage.ui.Format
 import io.github.clement83.sillage.ui.appContainer
@@ -106,12 +112,76 @@ fun RideUploadCard(recording: RecordingEntity) {
     }
 }
 
+/**
+ * A ride off any outing, with a paired account (#1766): "Make it a private outing", then its state.
+ * Once made, the ride is on that outing and [RideUploadCard] takes over.
+ */
+@Composable
+fun SoloOutingCard(recording: RecordingEntity) {
+    if (!SoloOutings.canMake(recording)) return
+    val container = appContainer()
+    val account by container.account.account.collectAsStateWithLifecycle(initialValue = null)
+    val scope = rememberCoroutineScope()
+    var confirm by rememberSaveable { mutableStateOf(false) }
+    val server = account?.server ?: return
+    val state = recording.uploadState
+
+    if (state == null || state == UploadState.CANCELLED) {
+        OutlinedButton(onClick = { confirm = true }, modifier = Modifier.fillMaxWidth()) {
+            Icon(Icons.Outlined.Flag, contentDescription = null)
+            Text(stringResource(R.string.solo_make), Modifier.padding(start = 8.dp))
+        }
+    } else {
+        Card(Modifier.fillMaxWidth()) {
+            Column(Modifier.padding(start = 12.dp, top = 12.dp, end = 4.dp, bottom = 4.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                Text(
+                    when (state) {
+                        UploadState.QUEUED -> stringResource(R.string.solo_queued)
+                        UploadState.SENT -> stringResource(R.string.solo_sent, Format.dateTime(recording.uploadedAt ?: 0))
+                        else -> uploadError(recording.uploadError)
+                    },
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = if (state == UploadState.FAILED) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.padding(end = 8.dp),
+                )
+                FlowRow(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(4.dp, Alignment.End)) {
+                    when (state) {
+                        UploadState.QUEUED -> TextButton(onClick = { scope.launch { container.rides.cancel(recording.id) } }) {
+                            Text(stringResource(R.string.ride_cancel))
+                        }
+                        UploadState.FAILED -> if (recording.uploadError != RideUploads.ERROR_SERVER_TOO_OLD) {
+                            Button(onClick = { scope.launch { container.rides.makeOuting(recording.id) } }) { Text(stringResource(R.string.retry)) }
+                        }
+                        else -> Unit
+                    }
+                }
+            }
+        }
+    }
+
+    if (confirm) {
+        AlertDialog(
+            onDismissRequest = { confirm = false },
+            title = { Text(stringResource(R.string.solo_confirm_title)) },
+            text = { Text(stringResource(R.string.solo_confirm_body, server.toUri().host ?: server)) },
+            confirmButton = {
+                TextButton(onClick = {
+                    confirm = false
+                    scope.launch { container.rides.makeOuting(recording.id) }
+                }) { Text(stringResource(R.string.solo_create)) }
+            },
+            dismissButton = { TextButton(onClick = { confirm = false }) { Text(stringResource(R.string.cancel)) } },
+        )
+    }
+}
+
 @Composable
 private fun uploadError(code: String?): String = when (code) {
     "tooEarly" -> stringResource(R.string.ride_error_too_early)
     "closed" -> stringResource(R.string.ride_error_closed)
-    "tooLarge" -> stringResource(R.string.ride_error_too_large)
-    "notGpx", "noTrack", "doctype" -> stringResource(R.string.ride_error_not_gpx)
+    "tooLarge", "tooBig" -> stringResource(R.string.ride_error_too_large)
+    "notGpx", "noTrack", "doctype", "noPoints" -> stringResource(R.string.ride_error_not_gpx)
+    RideUploads.ERROR_SERVER_TOO_OLD -> stringResource(R.string.solo_error_server)
     RideUploads.ERROR_NOT_FOUND -> stringResource(R.string.outing_gone)
     RideUploads.ERROR_UNAUTHORIZED -> stringResource(R.string.ride_error_unauthorized)
     RideUploads.ERROR_NO_ACCESS -> stringResource(R.string.ride_error_no_access)

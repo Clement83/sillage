@@ -52,7 +52,6 @@ import io.github.clement83.sillage.SillageApp
 import io.github.clement83.sillage.ui.Format
 import io.github.clement83.sillage.ui.appContainer
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
-import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 
 @Composable
@@ -64,8 +63,18 @@ fun SettingsScreen(onAccount: () -> Unit, onOfflineMaps: () -> Unit) {
     var serverInput by rememberSaveable { mutableStateOf<String?>(null) }
     var serverError by rememberSaveable { mutableStateOf(false) }
     var serverSaved by rememberSaveable { mutableStateOf(false) }
+    // Follows the stored server (pairing sets it while this screen sits in the back stack); an edit in
+    // progress survives a rotation because the stored value it started from has not changed.
+    var serverShown by rememberSaveable { mutableStateOf<String?>(null) }
     LaunchedEffect(Unit) {
-        if (serverInput == null) serverInput = settings.serverUrl.first().orEmpty()
+        settings.serverUrl.collect { stored ->
+            val value = stored.orEmpty()
+            if (serverInput == null || value != serverShown) {
+                serverInput = value
+                serverError = false
+            }
+            serverShown = value
+        }
     }
 
     fun save(value: String) = scope.launch {

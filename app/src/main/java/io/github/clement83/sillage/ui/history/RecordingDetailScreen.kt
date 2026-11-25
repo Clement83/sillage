@@ -190,6 +190,7 @@ fun RecordingDetailScreen(recordingId: Long, onBack: () -> Unit) {
         ) {
             recording?.let { TrackStatsRow(it.activeMs, it.distanceM, it.elevationGainM) }
             recording?.let { RideUploadCard(it) }
+            recording?.let { SoloOutingCard(it) }
             if (moments.isNotEmpty()) {
                 HorizontalDivider()
                 Text(stringResource(R.string.key_moments_title), style = MaterialTheme.typography.titleMedium)

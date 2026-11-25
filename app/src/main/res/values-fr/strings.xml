@@ -170,6 +170,14 @@
     <string name="ride_error_unauthorized">Ton compte a été dissocié sur singletrack. Associe-le à nouveau, puis renvoie.</string>
     <string name="ride_error_no_access">Associe ton compte singletrack, ou ouvre la sortie depuis ton lien personnel, pour envoyer la trace.</string>
     <string name="ride_error_other">Échec de l\'envoi (%1$s).</string>
+    <string name="solo_make">Transformer en sortie privée</string>
+    <string name="solo_confirm_title">Transformer en sortie privée ?</string>
+    <string name="solo_confirm_body">Visible seulement par toi, sur %1$s.</string>
+    <string name="solo_create">Créer</string>
+    <string name="solo_title">Sortie du %1$s</string>
+    <string name="solo_queued">Deviendra une sortie privée dès qu\'il y aura du réseau.</string>
+    <string name="solo_sent">Sortie privée créée le %1$s.</string>
+    <string name="solo_error_server">Ton serveur singletrack ne sait pas encore le faire.</string>
     <plurals name="outing_yes_count">
         <item quantity="one">%d participant confirmé</item>
         <item quantity="many">%d participants confirmés</item>

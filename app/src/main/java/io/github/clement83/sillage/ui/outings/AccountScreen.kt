@@ -74,8 +74,8 @@ fun AccountScreen(qrServer: String?, qrCode: String?, onBack: () -> Unit, onScan
             busy = false
             when (r) {
                 is ApiResult.Ok -> {
-                    // The QR names the server the user is signed in to: make it the app's server too.
-                    if (server != settingsServer) container.settings.setServerUrl(server)
+                    // The paired server is the app's server too (Réglages show it).
+                    container.settings.setServerUrl(server)
                     onPaired()
                 }
                 ApiResult.Unauthorized, ApiResult.NotFound -> error = R.string.account_error_code

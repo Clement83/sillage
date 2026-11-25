@@ -99,6 +99,30 @@ class SingletrackClient(
     }
 
     /** The regions the server offers for offline use (#1739). Account token only. */
+    /**
+     * Makes a ride a private solo outing of the account (#1765): it starts at the first point of
+     * [gpx] and holds it as the ridden track. The same [clientId] again gives the same outing.
+     * [startedAt] (ISO 8601 with offset) only counts when the GPX has no time.
+     */
+    suspend fun soloOuting(
+        server: String,
+        appToken: String,
+        gpx: ByteArray,
+        fileName: String,
+        clientId: String,
+        title: String,
+        startedAt: String,
+    ): ApiResult<SoloOutingResponse> {
+        val url = url(server, "api/app/rides") ?: return badServer()
+        val body = MultipartBody.Builder().setType(MultipartBody.FORM)
+            .addFormDataPart("file", fileName, gpx.toRequestBody(GPX))
+            .addFormDataPart("clientId", clientId)
+            .addFormDataPart("title", title)
+            .addFormDataPart("startedAt", startedAt)
+            .build()
+        return call(request(url, appToken).post(body).build(), SoloOutingResponse.serializer())
+    }
+
     suspend fun offlineCatalog(server: String, appToken: String): ApiResult<OfflineCatalog> =
         get(url(server, "api/app/offline"), appToken, OfflineCatalog.serializer())
 
@@ -233,7 +257,7 @@ class SingletrackClient(
 }
 
 @Suppress("UNCHECKED_CAST")
-private fun <T> ApiResult<*>.cast(): ApiResult<T> = when (this) {
+internal fun <T> ApiResult<*>.cast(): ApiResult<T> = when (this) {
     is ApiResult.Ok<*> -> error("Ok cannot be cast")
     else -> this as ApiResult<T>
 }

@@ -32,6 +32,8 @@ data class RecordingEntity(
     /** singletrack's error code (or `offline`, `unauthorized`, `not_found`) of the last failed upload. */
     @ColumnInfo(name = "upload_error") val uploadError: String? = null,
     @ColumnInfo(name = "uploaded_at") val uploadedAt: Long? = null,
+    /** Sent to singletrack when the ride becomes a solo outing (#1766), so that a resend gives the same outing. */
+    @ColumnInfo(name = "client_id") val clientId: String? = null,
 )
 
 enum class UploadState { QUEUED, SENT, FAILED, CANCELLED }
