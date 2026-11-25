@@ -40,7 +40,9 @@ import kotlinx.serialization.json.jsonArray
 import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
 import java.io.File
+import java.io.FileOutputStream
 import java.io.IOException
+import java.security.MessageDigest
 import java.util.concurrent.TimeUnit
 import kotlin.math.max
 import kotlin.math.min
@@ -74,6 +76,13 @@ class OfflineMaps(
     private val map = TileStore(File(dir, "map.mbtiles"), "pbf")
     private val relief = TileStore(File(dir, "relief.mbtiles"), "png")
     private val styleFile = File(dir, "style.json")
+
+    /** Vector map tiles on the phone (XYZ), for the trails the track snaps to (#1796). */
+    fun mapTile(z: Int, x: Int, y: Int): ByteArray? = map.tile(z, x, y)
+
+    /** BRouter segments for routing on the phone (#1733), shared by the zones that need them. */
+    val segmentsDir = File(dir, "segments")
+    private val segmentLock = Mutex()
     private val json = Json { ignoreUnknownKeys = true }
 
     /** Bumped whenever the stored tiles change, so that maps reload them. */
@@ -98,7 +107,9 @@ class OfflineMaps(
     }
 
     /** Space used on the phone by all the zones. */
-    suspend fun sizeOnDisk(): Long = withContext(Dispatchers.IO) { map.sizeOnDisk() + relief.sizeOnDisk() }
+    suspend fun sizeOnDisk(): Long = withContext(Dispatchers.IO) {
+        map.sizeOnDisk() + relief.sizeOnDisk() + (segmentsDir.listFiles()?.sumOf { it.length() } ?: 0L)
+    }
 
     /** The server's catalogue, kept a few minutes. */
     suspend fun catalog(force: Boolean = false): CatalogState = catalogLock.withLock {
@@ -132,6 +143,7 @@ class OfflineMaps(
         val account = accounts.current() ?: return@withContext null
         val reliefTiles: Int
         val mapBytes: Long
+        val route = outingId?.let { route(it) ?: return@withContext null }
         if (outingId == null) {
             mapBytes = region.pmtilesSize
             reliefTiles = if (region.bbox.size == 4) {
@@ -140,7 +152,7 @@ class OfflineMaps(
                 0
             }
         } else {
-            val route = route(outingId) ?: return@withContext null
+            route!!
             val archive = try {
                 RemoteArchive.open(reader(account.server, account.token, region.id))
             } catch (_: DownloadException) {
@@ -157,6 +169,31 @@ class OfflineMaps(
             reliefTiles = TileMath.corridorTiles(route, CORRIDOR_M, RELIEF_ZOOMS).size
         }
         mapBytes + reliefTiles * RELIEF_TILE_BYTES
+    }
+
+    /** Bytes still to download for [region]'s routing data. */
+    suspend fun estimateRouting(region: OfflineRegion): Long = withContext(Dispatchers.IO) {
+        region.segments.filterNot { isPresent(it) }.sumOf { it.size }
+    }
+
+    /** Starts downloading [region]'s routing data (#1733), apart from its map. */
+    suspend fun downloadRouting(server: String, region: OfflineRegion, name: String): Long {
+        val now = System.currentTimeMillis()
+        val id = dao.insert(
+            OfflineZoneEntity(
+                kind = ZoneKind.ROUTING,
+                name = name,
+                server = server,
+                regionId = region.id,
+                version = region.version,
+                state = ZoneState.QUEUED,
+                segments = region.segments.joinToString(",") { segmentName(it) },
+                createdAt = now,
+                updatedAt = now,
+            ),
+        )
+        enqueue(id)
+        return id
     }
 
     /** Starts downloading [region], or [outingId]'s corridor in it. */
@@ -203,6 +240,7 @@ class OfflineMaps(
             map.delete(zone.id)
             relief.delete(zone.id)
         }
+        pruneSegments()
         revision.value++
     }
 
@@ -238,6 +276,7 @@ class OfflineMaps(
             }
             val region = catalog.regions.firstOrNull { it.id == zone.regionId } ?: throw DownloadException(ERROR_GONE)
             setState(zone, ZoneState.DOWNLOADING, null)
+            if (zone.kind == ZoneKind.ROUTING) return@withContext runRouting(zone, account.token, region, onProgress)
 
             // The style first: it names the relief tiles.
             val style = when (val r = client.offlineStyle(zone.server, account.token, region.id)) {
@@ -356,6 +395,140 @@ class OfflineMaps(
         }
     }
 
+    /**
+     * A routing zone (#1733): the region's BRouter segments, large files fetched by chunks and
+     * resumable, progress counted in chunks.
+     */
+    private suspend fun runRouting(
+        zone: OfflineZoneEntity,
+        token: String,
+        region: OfflineRegion,
+        onProgress: suspend (name: String, done: Int, total: Int) -> Unit,
+    ): Boolean {
+        val segments = region.segments
+        val total = segments.sumOf { chunks(it.size) }
+        var done = segments.sumOf { s -> if (isPresent(s)) chunks(s.size) else chunks(partLength(s)) }
+        dao.get(zone.id)?.let { dao.update(it.copy(segments = segments.joinToString(",") { s -> segmentName(s) })) }
+        var lastReport = 0L
+        suspend fun report(force: Boolean = false) {
+            val now = System.currentTimeMillis()
+            if (!force && now - lastReport < REPORT_MS) return
+            lastReport = now
+            dao.setProgress(zone.id, ZoneState.DOWNLOADING, done, total, null, now)
+            onProgress(zone.name, done, total)
+        }
+        report(force = true)
+        for (segment in segments) {
+            val finished = downloadSegment(zone.server, token, segment) {
+                if (dao.get(zone.id) == null) return@downloadSegment false
+                done++
+                report()
+                true
+            }
+            if (!finished) return true // deleted meanwhile
+        }
+        dao.get(zone.id)?.let {
+            dao.update(
+                it.copy(
+                    state = ZoneState.READY,
+                    version = region.version,
+                    doneTiles = total,
+                    totalTiles = total,
+                    bytes = segments.sumOf { s -> s.size },
+                    error = null,
+                    updatedAt = System.currentTimeMillis(),
+                ),
+            )
+        }
+        return true
+    }
+
+    private fun segmentName(s: OfflineSegment) = s.name.removeSuffix(".rd5")
+    private fun segmentFile(s: OfflineSegment) = File(segmentsDir, "${segmentName(s)}.rd5")
+    private fun shaFile(s: OfflineSegment) = File(segmentsDir, "${segmentName(s)}.sha256")
+    private fun partFile(s: OfflineSegment) = File(segmentsDir, "${segmentName(s)}.rd5.part")
+    private fun partShaFile(s: OfflineSegment) = File(segmentsDir, "${segmentName(s)}.part.sha256")
+    private fun shaOf(s: OfflineSegment) = s.sha256.orEmpty().lowercase()
+    private fun chunks(bytes: Long) = ((bytes + SEGMENT_CHUNK - 1) / SEGMENT_CHUNK).toInt()
+
+    /** Already on the phone in the catalogue's version (or of the right size, if put there by hand). */
+    private fun isPresent(s: OfflineSegment) =
+        segmentFile(s).length() == s.size && shaFile(s).let { !it.isFile || it.readText() == shaOf(s) }
+
+    private fun partLength(s: OfflineSegment) =
+        if (partShaFile(s).takeIf { it.isFile }?.readText() == shaOf(s)) partFile(s).length() else 0L
+
+    /**
+     * Downloads [segment] into the segments folder, resuming a `.part` of the same version. [onChunk]
+     * runs after each chunk and returns false to stop (zone deleted): then false is returned.
+     */
+    private suspend fun downloadSegment(server: String, token: String, segment: OfflineSegment, onChunk: suspend () -> Boolean): Boolean =
+        segmentLock.withLock {
+            segmentsDir.mkdirs()
+            val existing = segmentFile(segment)
+            if (existing.length() == segment.size) {
+                val known = shaFile(segment)
+                if (known.isFile && known.readText() == shaOf(segment)) return@withLock true
+                // There without its checksum (copied by hand): kept if it is the right file.
+                if (!known.isFile && (shaOf(segment).isBlank() || sha256(existing) == shaOf(segment))) {
+                    known.writeText(shaOf(segment))
+                    return@withLock true
+                }
+            }
+            val part = partFile(segment)
+            if (partLength(segment) == 0L) {
+                part.delete()
+                partShaFile(segment).writeText(shaOf(segment))
+            }
+            var offset = part.length()
+            FileOutputStream(part, true).use { out ->
+                while (offset < segment.size) {
+                    currentCoroutineContext().ensureActive()
+                    val length = min(SEGMENT_CHUNK, segment.size - offset)
+                    val bytes = when (val r = client.offlineSegmentRange(server, token, segmentName(segment), offset, length)) {
+                        is ApiResult.Ok -> r.value
+                        else -> throw DownloadException.of(r)
+                    }
+                    out.write(bytes)
+                    out.flush()
+                    offset += bytes.size
+                    if (!onChunk()) return@withLock false
+                }
+            }
+            if (shaOf(segment).isNotBlank() && sha256(part) != shaOf(segment)) {
+                part.delete()
+                partShaFile(segment).delete()
+                throw DownloadException(ERROR_OTHER)
+            }
+            val file = segmentFile(segment)
+            file.delete()
+            if (!part.renameTo(file)) throw DownloadException(ERROR_OTHER)
+            shaFile(segment).writeText(shaOf(segment))
+            partShaFile(segment).delete()
+            true
+        }
+
+    /** Deletes the segments no zone needs any more. */
+    private suspend fun pruneSegments() = segmentLock.withLock {
+        withContext(Dispatchers.IO) {
+            val keep = dao.all().flatMap { it.segments.split(',') }.filter { it.isNotBlank() }.toSet()
+            segmentsDir.listFiles()?.forEach { f -> if (f.name.substringBefore('.') !in keep) f.delete() }
+        }
+    }
+
+    private fun sha256(file: File): String {
+        val digest = MessageDigest.getInstance("SHA-256")
+        file.inputStream().use { input ->
+            val buffer = ByteArray(1 shl 16)
+            while (true) {
+                val n = input.read(buffer)
+                if (n < 0) break
+                digest.update(buffer, 0, n)
+            }
+        }
+        return digest.digest().joinToString("") { "%02x".format(it) }
+    }
+
     private suspend fun setState(zone: OfflineZoneEntity, state: ZoneState, error: String?) {
         val current = dao.get(zone.id) ?: return
         dao.setProgress(zone.id, state, current.doneTiles, current.totalTiles, error, System.currentTimeMillis())
@@ -433,6 +606,9 @@ class OfflineMaps(
         val RELIEF_ZOOMS = 5..11
         const val RELIEF_TILE_BYTES = 80_000L
         private const val RELIEF_PARALLEL = 4
+
+        /** Segments come by 4 MB requests (a segment is 60–240 MB). */
+        private const val SEGMENT_CHUNK = 4L * 1024 * 1024
 
         private const val CATALOG_TTL_MS = 5 * 60_000L
         private const val REPORT_MS = 1_000L

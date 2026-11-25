@@ -119,7 +119,9 @@ fun SettingsScreen(onAccount: () -> Unit, onOfflineMaps: () -> Unit) {
         OfflineSection(onOfflineMaps)
 
         HorizontalDivider()
+        RecordingSection()
         LockScreenSection()
+        OffTrackSection()
 
         HorizontalDivider()
         BatterySection()
@@ -171,6 +173,42 @@ private fun OfflineSection(onOfflineMaps: () -> Unit) {
         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
             OutlinedButton(onClick = onOfflineMaps) { Text(stringResource(R.string.settings_account_manage)) }
         }
+    }
+}
+
+/** The clean track (#1795). */
+@Composable
+private fun RecordingSection() {
+    val settings = appContainer().settings
+    val scope = rememberCoroutineScope()
+    val smooth by settings.smoothTrack.collectAsStateWithLifecycle(initialValue = true)
+    Section(R.string.settings_recording_title) {
+        SettingSwitch(stringResource(R.string.settings_smooth_track), smooth) { scope.launch { settings.setSmoothTrack(it) } }
+    }
+}
+
+/** The alert when I leave the followed track (#1797). */
+@Composable
+private fun OffTrackSection() {
+    val settings = appContainer().settings
+    val scope = rememberCoroutineScope()
+    val alert by settings.offTrackAlert.collectAsStateWithLifecycle(initialValue = true)
+    val reminder by settings.offTrackReminder.collectAsStateWithLifecycle(initialValue = true)
+    val sound by settings.offTrackSound.collectAsStateWithLifecycle(initialValue = false)
+    Section(R.string.settings_off_track_title) {
+        SettingSwitch(stringResource(R.string.settings_off_track_alert), alert) { scope.launch { settings.setOffTrackAlert(it) } }
+        if (alert) {
+            SettingSwitch(stringResource(R.string.settings_off_track_reminder), reminder) { scope.launch { settings.setOffTrackReminder(it) } }
+            SettingSwitch(stringResource(R.string.settings_off_track_sound), sound) { scope.launch { settings.setOffTrackSound(it) } }
+        }
+    }
+}
+
+@Composable
+private fun SettingSwitch(label: String, checked: Boolean, onChange: (Boolean) -> Unit) {
+    Row(verticalAlignment = Alignment.CenterVertically) {
+        Text(label, style = MaterialTheme.typography.bodyLarge, modifier = Modifier.weight(1f).padding(end = 12.dp))
+        Switch(checked = checked, onCheckedChange = onChange)
     }
 }
 

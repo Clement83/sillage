@@ -8,6 +8,10 @@ Développée sur le poste de Clément (pas d'agentRunner). Le board Kanboard ser
 
 ## Principes non négociables
 
+- **Indépendance** : Sillage et singletrack marchent l'une sans l'autre. Sans serveur (ou avec un serveur
+  ancien), tout ce qui est local reste utilisable ; les fonctions réseau se dégradent proprement. La
+  logique d'usage (proposer une sortie, synchroniser ou non) est dans l'app, jamais une règle ajoutée
+  côté serveur pour l'app.
 - **Rien ne dépend du réseau pour enregistrer.** L'enregistrement, les moments clés, l'export et
   l'import marchent en mode avion, sans compte. singletrack est optionnel.
 - **F-Droid, pas de Play Store** : aucune dépendance propriétaire. Pas de Google Play Services
@@ -66,6 +70,11 @@ d'au moins 48 dp (64 dp pour le moment clé, utilisable avec des gants).
 ## Kanboard — suivi
 
 - **Projet Kanboard** : sillage (`project_id: 56`). Côté serveur : singletrack (`project_id: 54`).
+- **Board singletrack (`project_id: 54`) : toujours à suivre aussi.** Les routes `/api/app/*`, les MEP et
+  la version de la prod (`/api/health`) s'y trouvent. Ne regarder que le board sillage donne une vue
+  incomplète.
+- Une fonctionnalité qui touche le serveur n'est utilisable qu'après la MEP singletrack correspondante :
+  vérifier le ticket [MEP] (et `/api/health`) avant d'annoncer qu'elle marche.
 - Colonnes : BACKLOG → TODO → WIP → HUMAN REVIEW → DONE. Prendre un ticket = le passer en WIP ;
   terminé côté code = HUMAN REVIEW, avec un commentaire qui dit ce qui est fait, ce qui reste à vérifier
   sur le téléphone, et tout écart à la spec.

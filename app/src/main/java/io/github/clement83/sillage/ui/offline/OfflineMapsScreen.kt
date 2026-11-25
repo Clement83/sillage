@@ -66,6 +66,7 @@ fun OfflineMapsScreen(onBack: () -> Unit) {
     var attempt by remember { mutableIntStateOf(0) }
     var used by remember { mutableLongStateOf(0L) }
     var toDownload by remember { mutableStateOf<OfflineRegion?>(null) }
+    var toDownloadRouting by remember { mutableStateOf<OfflineRegion?>(null) }
     var toDelete by remember { mutableStateOf<OfflineZoneEntity?>(null) }
 
     LaunchedEffect(attempt) {
@@ -121,21 +122,20 @@ fun OfflineMapsScreen(onBack: () -> Unit) {
                         Text(stringResource(R.string.offline_none_offered), style = MaterialTheme.typography.bodyMedium)
                     }
                     regions.forEach { region ->
-                        val have = zones.any { it.kind == ZoneKind.REGION && it.regionId == region.id && it.server == c.server }
-                        Row(verticalAlignment = Alignment.CenterVertically) {
-                            Column(Modifier.weight(1f)) {
-                                Text(region.name, style = MaterialTheme.typography.bodyLarge)
-                                Text(
-                                    Formatter.formatShortFileSize(context, region.pmtilesSize),
-                                    style = MaterialTheme.typography.bodySmall,
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        fun has(kind: ZoneKind) = zones.any { it.kind == kind && it.regionId == region.id && it.server == c.server }
+                        Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                            Text(region.name, style = MaterialTheme.typography.bodyLarge)
+                            RegionPart(
+                                label = stringResource(R.string.offline_map, Formatter.formatShortFileSize(context, region.pmtilesSize)),
+                                downloadable = !has(ZoneKind.REGION),
+                                onDownload = { toDownload = region },
+                            )
+                            if (region.segments.isNotEmpty()) {
+                                RegionPart(
+                                    label = stringResource(R.string.offline_routing, Formatter.formatShortFileSize(context, region.segments.sumOf { it.size })),
+                                    downloadable = !has(ZoneKind.ROUTING),
+                                    onDownload = { toDownloadRouting = region },
                                 )
-                            }
-                            if (!have) {
-                                OutlinedButton(onClick = { toDownload = region }) {
-                                    Icon(Icons.Outlined.Download, contentDescription = null)
-                                    Text(stringResource(R.string.offline_download), Modifier.padding(start = 6.dp))
-                                }
                             }
                         }
                     }
@@ -165,6 +165,19 @@ fun OfflineMapsScreen(onBack: () -> Unit) {
             onDismiss = { toDownload = null },
         )
     }
+    toDownloadRouting?.let { region ->
+        val name = stringResource(R.string.offline_routing, region.name)
+        DownloadDialog(
+            name = name,
+            wifiOnly = !mobileData,
+            estimate = { maps.estimateRouting(region) },
+            onConfirm = {
+                toDownloadRouting = null
+                ready?.let { r -> scope.launch { maps.downloadRouting(r.server, region, name) } }
+            },
+            onDismiss = { toDownloadRouting = null },
+        )
+    }
     toDelete?.let { zone ->
         AlertDialog(
             onDismissRequest = { toDelete = null },
@@ -177,6 +190,25 @@ fun OfflineMapsScreen(onBack: () -> Unit) {
             },
             dismissButton = { TextButton(onClick = { toDelete = null }) { Text(stringResource(R.string.cancel)) } },
         )
+    }
+}
+
+/** One thing a region offers (its map, its routes): size, and Download if not on the phone yet. */
+@Composable
+private fun RegionPart(label: String, downloadable: Boolean, onDownload: () -> Unit) {
+    Row(verticalAlignment = Alignment.CenterVertically) {
+        Text(
+            label,
+            style = MaterialTheme.typography.bodyMedium,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            modifier = Modifier.weight(1f),
+        )
+        if (downloadable) {
+            OutlinedButton(onClick = onDownload) {
+                Icon(Icons.Outlined.Download, contentDescription = null)
+                Text(stringResource(R.string.offline_download), Modifier.padding(start = 6.dp))
+            }
+        }
     }
 }
 

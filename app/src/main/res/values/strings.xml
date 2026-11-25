@@ -213,4 +213,25 @@
     <string name="offline_mobile_data">Also download over mobile data</string>
     <string name="offline_first">Always use the downloaded map</string>
     <string name="offline_ready_outing">Offline map ready</string>
+    <string name="route_computing">Finding a route…</string>
+    <string name="route_no_position">Location unknown. Wait for GPS.</string>
+    <string name="route_found">%1$s · D+ %2$s</string>
+    <string name="route_straight">%1$s as the crow flies</string>
+    <string name="route_close">Close the route</string>
+    <string name="route_name">Route, %1$s</string>
+    <string name="offline_map">Map · %1$s</string>
+    <string name="offline_routing">Routes · %1$s</string>
+    <string name="match_question">Were you on this outing?</string>
+    <string name="match_title">%1$s at %2$s</string>
+    <string name="match_join">Add to the outing</string>
+    <string name="match_solo">Create a solo outing</string>
+    <string name="match_skip">Don\'t sync</string>
+    <string name="off_track">Off track · %1$s</string>
+    <string name="settings_off_track_title">Followed track</string>
+    <string name="settings_off_track_alert">Vibrate when I leave the track</string>
+    <string name="settings_off_track_reminder">Remind me every 2 minutes</string>
+    <string name="settings_off_track_sound">Beep too</string>
+    <string name="settings_recording_title">Recording</string>
+    <string name="settings_smooth_track">Smooth my track</string>
+    <string name="export_raw">Raw GPS track</string>
 </resources>

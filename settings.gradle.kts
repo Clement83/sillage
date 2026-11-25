@@ -22,3 +22,4 @@ dependencyResolutionManagement {
 
 rootProject.name = "Sillage"
 include(":app")
+include(":brouter")

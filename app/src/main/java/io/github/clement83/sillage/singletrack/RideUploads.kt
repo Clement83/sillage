@@ -19,6 +19,10 @@ import io.github.clement83.sillage.data.UploadState
 import io.github.clement83.sillage.export.ExportTrack
 import io.github.clement83.sillage.export.ExportWaypoint
 import io.github.clement83.sillage.export.TrackExport
+import io.github.clement83.sillage.geo.CleanTrack
+import io.github.clement83.sillage.geo.TrailSnapper
+import io.github.clement83.sillage.settings.SettingsRepository
+import kotlinx.coroutines.flow.first
 import java.text.DateFormat
 import java.util.Date
 import java.util.UUID
@@ -36,6 +40,8 @@ class RideUploads(
     private val accounts: AccountStore,
     private val repository: OutingRepository,
     private val client: SingletrackClient,
+    private val settings: SettingsRepository,
+    private val trails: () -> TrailSnapper,
 ) {
     private val work get() = WorkManager.getInstance(context)
 
@@ -53,6 +59,12 @@ class RideUploads(
         val outing = recording.outingId?.let { outings.get(it) } ?: return
         if (accounts.current()?.server != outing.server || target(recording) == null) return
         send(recordingId, AUTO_DELAY_MS)
+    }
+
+    /** Joins a ride made off any outing to [outingId] (#1777), then sends it there like a ride on that outing. */
+    suspend fun joinOuting(recordingId: Long, outingId: Long) {
+        recordings.setOuting(recordingId, outingId)
+        send(recordingId)
     }
 
     /** Makes the ride a private solo outing of the paired account (#1766), as soon as the network is there. */
@@ -152,8 +164,9 @@ class RideUploads(
     }
 
     private suspend fun gpx(recording: RecordingEntity): String {
-        val segments = recordings.points(recording.id).groupBy { it.segment }.toSortedMap().values
+        val raw = recordings.points(recording.id).groupBy { it.segment }.toSortedMap().values
             .map { seg -> seg.map { it.toFix() } }
+        val segments = if (settings.smoothTrack.first()) CleanTrack(trails).feed(raw) else raw
         val defaultName = context.getString(R.string.key_moment_default_name)
         val outingTitle = recording.outingId?.let { outings.get(it) }?.title
         return TrackExport.gpx(

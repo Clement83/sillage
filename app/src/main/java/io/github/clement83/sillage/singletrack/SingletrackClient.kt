@@ -137,8 +137,15 @@ class SingletrackClient(
      * Bytes [offset] to [offset] + [length] - 1 of an offline file (`<region>.pmtiles`), by HTTP range.
      * Fewer bytes only when the file ends sooner.
      */
-    suspend fun offlineRange(server: String, appToken: String, file: String, offset: Long, length: Long): ApiResult<ByteArray> {
-        val url = url(server, "api/app/offline", file) ?: return badServer()
+    suspend fun offlineRange(server: String, appToken: String, file: String, offset: Long, length: Long): ApiResult<ByteArray> =
+        range(url(server, "api/app/offline", file), appToken, offset, length)
+
+    /** Bytes of the BRouter segment `<name>.rd5` (#1733), by range so that a download resumes. */
+    suspend fun offlineSegmentRange(server: String, appToken: String, name: String, offset: Long, length: Long): ApiResult<ByteArray> =
+        range(url(server, "api/app/offline/segments", "$name.rd5"), appToken, offset, length)
+
+    private suspend fun range(url: HttpUrl?, appToken: String, offset: Long, length: Long): ApiResult<ByteArray> {
+        if (url == null) return badServer()
         val request = request(url, appToken)
             .header("Accept", "*/*")
             .header("Range", "bytes=$offset-${offset + length - 1}")

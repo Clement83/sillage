@@ -1,5 +1,6 @@
 package io.github.clement83.sillage.ui.map
 
+import androidx.compose.foundation.background
 import android.content.Intent
 import android.provider.Settings
 import androidx.compose.foundation.layout.Arrangement
@@ -74,6 +75,16 @@ fun RecordingPanel(
         colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface.copy(alpha = 0.94f)),
     ) {
         Column(Modifier.padding(vertical = 8.dp, horizontal = 4.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+            state.offTrackM?.let { away ->
+                Text(
+                    stringResource(R.string.off_track, Format.distance(away)),
+                    style = MaterialTheme.typography.titleMedium,
+                    color = MaterialTheme.colorScheme.onErrorContainer,
+                    modifier = Modifier.fillMaxWidth()
+                        .background(MaterialTheme.colorScheme.errorContainer, MaterialTheme.shapes.small)
+                        .padding(horizontal = 12.dp, vertical = 6.dp),
+                )
+            }
             TrackStatsRow(activeMs, state.distanceM, state.elevationGainM)
             if (followedProfile.size >= 2) {
                 ElevationProfile(

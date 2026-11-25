@@ -55,6 +55,30 @@ class SettingsRepository(context: Context) {
         store.edit { it[OFFLINE_MOBILE_DATA] = enabled }
     }
 
+    /** Show, export and send the clean track rather than the raw GPS fixes (#1795). */
+    val smoothTrack: Flow<Boolean> = store.data.map { it[SMOOTH_TRACK] ?: true }
+
+    suspend fun setSmoothTrack(enabled: Boolean) {
+        store.edit { it[SMOOTH_TRACK] = enabled }
+    }
+
+    /** Off-track alert (#1797): vibrate when I leave the followed track, remind every 2 min, beep. */
+    val offTrackAlert: Flow<Boolean> = store.data.map { it[OFF_TRACK_ALERT] ?: true }
+    val offTrackReminder: Flow<Boolean> = store.data.map { it[OFF_TRACK_REMINDER] ?: true }
+    val offTrackSound: Flow<Boolean> = store.data.map { it[OFF_TRACK_SOUND] ?: false }
+
+    suspend fun setOffTrackAlert(enabled: Boolean) {
+        store.edit { it[OFF_TRACK_ALERT] = enabled }
+    }
+
+    suspend fun setOffTrackReminder(enabled: Boolean) {
+        store.edit { it[OFF_TRACK_REMINDER] = enabled }
+    }
+
+    suspend fun setOffTrackSound(enabled: Boolean) {
+        store.edit { it[OFF_TRACK_SOUND] = enabled }
+    }
+
     /** Version of the distance and climb computation the stored rides were counted with. */
     val statsVersion: Flow<Int> = store.data.map { it[STATS_VERSION] ?: 1 }
 
@@ -64,6 +88,10 @@ class SettingsRepository(context: Context) {
 
     private companion object {
         val STATS_VERSION = intPreferencesKey("stats_version")
+        val SMOOTH_TRACK = booleanPreferencesKey("smooth_track")
+        val OFF_TRACK_ALERT = booleanPreferencesKey("off_track_alert")
+        val OFF_TRACK_REMINDER = booleanPreferencesKey("off_track_reminder")
+        val OFF_TRACK_SOUND = booleanPreferencesKey("off_track_sound")
         val SERVER_URL = stringPreferencesKey("server_url")
         val LOCK_SCREEN_MAP = booleanPreferencesKey("lock_screen_map")
         val OFFLINE_FIRST = booleanPreferencesKey("offline_first")

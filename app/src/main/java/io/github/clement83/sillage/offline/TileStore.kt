@@ -135,6 +135,17 @@ class TileStore(val file: File, private val format: String) {
         db.rawQuery("PRAGMA wal_checkpoint(TRUNCATE)", null).use { it.moveToFirst() }
     }
 
+    /** One stored tile (XYZ [y]), as stored (possibly gzipped); null when absent or no store yet. */
+    @Synchronized
+    fun tile(z: Int, x: Int, y: Int): ByteArray? {
+        if (!file.exists()) return null
+        val tmsY = (1 shl z) - 1 - y
+        return db.rawQuery(
+            "SELECT tile_data FROM tiles WHERE zoom_level = ? AND tile_column = ? AND tile_row = ?",
+            arrayOf(z.toString(), x.toString(), tmsY.toString()),
+        ).use { if (it.moveToFirst()) it.getBlob(0) else null }
+    }
+
     /** True once at least one tile is stored. */
     @Synchronized
     fun hasTiles(): Boolean = file.exists() && db.rawQuery("SELECT 1 FROM tiles LIMIT 1", null).use { it.moveToFirst() }

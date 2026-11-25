@@ -3,7 +3,10 @@ package io.github.clement83.sillage
 import android.content.Context
 import io.github.clement83.sillage.data.SillageDatabase
 import io.github.clement83.sillage.importer.TrackLibrary
+import io.github.clement83.sillage.geo.TrailSnapper
 import io.github.clement83.sillage.offline.OfflineMaps
+import io.github.clement83.sillage.offline.TrailNetwork
+import io.github.clement83.sillage.routing.Routing
 import io.github.clement83.sillage.recording.RecordingController
 import io.github.clement83.sillage.settings.SettingsRepository
 import kotlinx.coroutines.CoroutineScope
@@ -35,8 +38,15 @@ class AppContainer(context: Context) {
         singletrack,
         followedTrackId = { recorder.state.value.takeIf { it.isActive }?.followedTrackId },
     )
-    val rides = RideUploads(context.applicationContext, database.recordings(), database.outings(), account, outings, singletrack)
+    val rides = RideUploads(context.applicationContext, database.recordings(), database.outings(), account, outings, singletrack, settings, ::trailSnapper)
     val offline = OfflineMaps(context.applicationContext, database.offlineZones(), account, singletrack, outings, settings)
+    val routing = Routing(context.applicationContext, offline.segmentsDir)
+
+    /** A fresh snapper onto the trails of the offline map (#1796), with its own small tile cache. */
+    fun trailSnapper(): TrailSnapper {
+        val network = TrailNetwork(offline::mapTile)
+        return TrailSnapper({ lat, lon -> network.near(lat, lon).map { it.points } })
+    }
 
     /** A singletrack link opened from outside (browser, message), waiting for the UI to open it. */
     val incomingLink = MutableStateFlow<SingletrackLink?>(null)

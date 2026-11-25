@@ -38,6 +38,8 @@ data class RecorderState(
     val pendingKeyMoments: Int = 0,
     /** Imported track shown while recording (#1742), if any. */
     val followedTrackId: Long? = null,
+    /** How far from the followed track, while off it for good (#1797); null on it or without track. */
+    val offTrackM: Double? = null,
 ) {
     val keyMomentCount: Int get() = keyMoments.size + pendingKeyMoments
 

@@ -8,6 +8,9 @@ import android.content.pm.ServiceInfo
 import android.location.Location
 import android.location.LocationManager
 import android.os.Build
+import android.media.AudioAttributes
+import android.media.AudioManager
+import android.media.ToneGenerator
 import android.os.VibrationEffect
 import android.os.Vibrator
 import android.os.PowerManager
@@ -30,6 +33,7 @@ import io.github.clement83.sillage.data.RecordingStatus
 import io.github.clement83.sillage.data.TrackPointEntity
 import io.github.clement83.sillage.geo.Fix
 import io.github.clement83.sillage.geo.FixFilter
+import io.github.clement83.sillage.geo.OffTrackDetector
 import io.github.clement83.sillage.geo.TrackStats
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
@@ -38,6 +42,7 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import java.util.concurrent.Executors
+import kotlin.math.abs
 
 /**
  * Records the track: GPS fixes from [LocationManager] (no Play Services), filtered, written to Room
@@ -93,6 +98,9 @@ class RecordingService : LifecycleService() {
         super.onCreate()
         RecordingNotifications.createChannel(this)
         controller.update { it.copy(serviceRunning = true) }
+        lifecycleScope.launch { container.settings.offTrackAlert.collect { offTrackAlert = it } }
+        lifecycleScope.launch { container.settings.offTrackReminder.collect { offTrackReminder = it } }
+        lifecycleScope.launch { container.settings.offTrackSound.collect { offTrackSound = it } }
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
@@ -132,6 +140,7 @@ class RecordingService : LifecycleService() {
         if (!hasLocationPermission()) return shutdown()
         val entity = RecordingEntity(startedAt = System.currentTimeMillis(), followedTrackId = followTrackId, outingId = outingId)
         recording = entity.copy(id = dao.insert(entity))
+        loadFollowed(followTrackId)
         stats = TrackStats()
         segments.clear()
         nextSegmentIndex = 0
@@ -168,6 +177,7 @@ class RecordingService : LifecycleService() {
         keyMoments.clear()
         keyMoments.addAll(dao.keyMoments(open.id))
         recording = open
+        loadFollowed(open.followedTrackId)
         if (resumeRecording || open.status == RecordingStatus.RECORDING) {
             beginRecording()
         } else {
@@ -193,6 +203,7 @@ class RecordingService : LifecycleService() {
     private fun follow(trackId: Long?, outingId: Long? = null) {
         val rec = recording ?: return
         recording = rec.copy(followedTrackId = trackId, outingId = outingId ?: rec.outingId)
+        loadFollowed(trackId)
         publish()
         lifecycleScope.launch { flush() }
     }
@@ -284,7 +295,56 @@ class RecordingService : LifecycleService() {
             pendingMomentTimes.toList().forEach { lifecycleScope.launch { saveKeyMoment(it, fix) } }
             pendingMomentTimes.clear()
         }
-        publish(notify = false)
+        publish(notify = checkOffTrack(fix))
+    }
+
+    // --- Off the followed track (#1797) ---------------------------------------------------------
+
+    // Set on the main thread, read where the fixes arrive.
+    @Volatile private var offTrack: OffTrackDetector? = null
+    @Volatile private var offTrackM: Double? = null
+    @Volatile private var offTrackAlert = true
+    @Volatile private var offTrackReminder = true
+    @Volatile private var offTrackSound = false
+
+    /** Watches the followed track, or none. */
+    private fun loadFollowed(trackId: Long?) {
+        offTrack = null
+        offTrackM = null
+        if (trackId == null) return
+        lifecycleScope.launch {
+            val segments = container.tracks.geometry(trackId).segments.filter { it.size >= 2 }
+            if (recording?.followedTrackId == trackId && segments.isNotEmpty()) offTrack = OffTrackDetector(segments)
+        }
+    }
+
+    /** Alerts when I leave the followed track. True when the notification text must change. */
+    private fun checkOffTrack(fix: Fix): Boolean {
+        val detector = offTrack ?: return false
+        val status = detector.update(fix.time, fix.lat, fix.lon, reminders = offTrackReminder)
+        val before = offTrackM
+        offTrackM = status.distanceM?.takeIf { status.offTrack }
+        if (offTrackAlert && (status.event == OffTrackDetector.Event.LEFT || status.event == OffTrackDetector.Event.REMIND)) alertOffTrack()
+        val now = offTrackM
+        return (before == null) != (now == null) || (before != null && now != null && abs(now - before) >= NOTIFY_STEP_M)
+    }
+
+    /** Three short pulses, felt in a pocket, screen off; a beep if asked for. */
+    private fun alertOffTrack() {
+        getSystemService(Vibrator::class.java)?.takeIf { it.hasVibrator() }?.vibrate(
+            VibrationEffect.createWaveform(longArrayOf(0, 200, 150, 200, 150, 200), -1),
+            AudioAttributes.Builder().setUsage(AudioAttributes.USAGE_ALARM).build(),
+        )
+        if (offTrackSound) {
+            runCatching {
+                val tone = ToneGenerator(AudioManager.STREAM_ALARM, 90)
+                tone.startTone(ToneGenerator.TONE_PROP_BEEP2, 400)
+                lifecycleScope.launch {
+                    delay(600)
+                    tone.release()
+                }
+            }
+        }
     }
 
     // --- Key moments ----------------------------------------------------------------------------
@@ -417,6 +477,7 @@ class RecordingService : LifecycleService() {
         keyMoments = keyMoments.toList(),
         pendingKeyMoments = pendingMomentTimes.size,
         followedTrackId = recording?.followedTrackId,
+        offTrackM = offTrackM,
     )
 
     @SuppressLint("MissingPermission")
@@ -456,5 +517,8 @@ class RecordingService : LifecycleService() {
         private const val WAKE_LOCK_TIMEOUT_MS = 12 * 60 * 60 * 1000L
         private const val FRESH_FIX_MS = 30_000L
         private const val VIBRATION_MS = 80L
+
+        /** The notification follows the distance off the track by steps of this many metres. */
+        private const val NOTIFY_STEP_M = 10.0
     }
 }

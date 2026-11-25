@@ -68,6 +68,22 @@ class TrackLibrary(private val context: Context, private val dao: ImportedTrackD
         TrackParser.parse(bytes)
     }
 
+    /** Keeps a route found on the map (#1733) as a track, so that it can be followed like an import. */
+    suspend fun saveRoute(name: String, points: List<GeoPoint>, destination: GeoPoint): Long {
+        val segments = listOf(points)
+        return dao.insertAll(
+            ImportedTrackEntity(
+                name = name,
+                importedAt = System.currentTimeMillis(),
+                distanceM = TrackShape.distanceM(segments),
+                elevationGainM = TrackShape.elevationGainM(segments),
+                pointCount = points.size,
+            ),
+            points = { id -> points.map { ImportedPointEntity(trackId = id, segment = 0, lat = it.lat, lon = it.lon, alt = it.alt) } },
+            waypoints = { id -> listOf(ImportedWaypointEntity(trackId = id, name = null, lat = destination.lat, lon = destination.lon, alt = null)) },
+        )
+    }
+
     private suspend fun save(track: ParsedTrack, fileName: String?): Long {
         val segments = track.segments.map { seg -> seg.map { GeoPoint(it.lat, it.lon, it.alt) } }
         val entity = ImportedTrackEntity(

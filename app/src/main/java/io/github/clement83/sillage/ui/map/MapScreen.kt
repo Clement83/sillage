@@ -53,17 +53,26 @@ import io.github.clement83.sillage.map.awaitMap
 import io.github.clement83.sillage.map.awaitStyle
 import io.github.clement83.sillage.map.rememberMapView
 import io.github.clement83.sillage.ui.appContainer
+import io.github.clement83.sillage.geo.Fix
+import io.github.clement83.sillage.geo.GeoMath
+import io.github.clement83.sillage.geo.GeoPoint
 import io.github.clement83.sillage.geo.TrackShape
+import io.github.clement83.sillage.geo.CleanTrack
+import io.github.clement83.sillage.routing.RouteResult
+import io.github.clement83.sillage.ui.Format
 import io.github.clement83.sillage.importer.TrackGeometry
 import io.github.clement83.sillage.ui.rememberUnlockRequest
 import io.github.clement83.sillage.ui.permissions.LocationAccess
 import io.github.clement83.sillage.ui.permissions.LocationPermissionState
 import io.github.clement83.sillage.ui.permissions.rememberLocationPermissionState
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.conflate
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import org.maplibre.android.camera.CameraPosition
 import org.maplibre.android.geometry.LatLng
 import org.maplibre.android.location.LocationComponentActivationOptions
@@ -79,6 +88,9 @@ private const val RECORDING_SOURCE = "recording"
 private const val MOMENTS_SOURCE = "recording-moments"
 private const val FOLLOWED_SOURCE = "followed-track"
 private const val FOLLOWED_WAYPOINTS_SOURCE = "followed-waypoints"
+private const val ROUTE_SOURCE = "route-to-point"
+private const val STRAIGHT_SOURCE = "route-straight"
+private const val DESTINATION_SOURCE = "route-destination"
 private const val TRACK_REDRAW_MS = 1500L
 
 /**
@@ -105,20 +117,33 @@ fun MapScreen(onRecordingFinished: (Long) -> Unit, lockedMode: Boolean = false) 
     val tracks = appContainer().tracks
     val baseStyle = appContainer().offline.baseStyle
     var followed by remember { mutableStateOf<TrackGeometry?>(null) }
+    val routing = appContainer().routing
+    val smoothTrack = appContainer().settings.smoothTrack
+    val container = appContainer()
+    // The clean track, built fix by fix as they come (#1795, #1796).
+    val cleanTrack = remember { CleanTrack(container::trailSnapper) }
+    val routeColor = MaterialTheme.colorScheme.tertiary.toArgb()
+    // The point tapped on the map and the route to it (#1733).
+    var destination by remember { mutableStateOf<GeoPoint?>(null) }
+    var route by remember { mutableStateOf<RouteUi?>(null) }
+    var pendingFollow by remember { mutableStateOf<Long?>(null) }
     val density = LocalDensity.current
     val attributionBottomPx = with(density) { 88.dp.roundToPx() }
     val attributionEndPx = with(density) { 8.dp.roundToPx() }
 
     val notificationLauncher = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) {
-        recorder.start()
+        recorder.start(followTrackId = pendingFollow)
+        pendingFollow = null
     }
-    fun startRecording() {
+    fun startRecording(followTrackId: Long? = null) {
         when {
             permission.access != LocationAccess.Precise -> showPermissionCard = true
             Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU &&
-                ContextCompat.checkSelfPermission(context, Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED ->
+                ContextCompat.checkSelfPermission(context, Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED -> {
+                pendingFollow = followTrackId
                 notificationLauncher.launch(Manifest.permission.POST_NOTIFICATIONS)
-            else -> recorder.start()
+            }
+            else -> recorder.start(followTrackId = followTrackId)
         }
         map?.takeIf { it.locationComponent.isLocationComponentActivated }?.followMe()
     }
@@ -140,6 +165,12 @@ fun MapScreen(onRecordingFinished: (Long) -> Unit, lockedMode: Boolean = false) 
             }
             c.target?.let { camera = listOf(it.latitude, it.longitude, c.zoom, if (tracking) 1.0 else 0.0) }
         }
+        if (!lockedMode) {
+            m.addOnMapClickListener { p ->
+                destination = GeoPoint(p.latitude, p.longitude)
+                true
+            }
+        }
         map = m
         // A new base map (zone downloaded or deleted) means a new style: the layers go on again.
         baseStyle.collect { json ->
@@ -149,6 +180,9 @@ fun MapScreen(onRecordingFinished: (Long) -> Unit, lockedMode: Boolean = false) 
             TrackLayers.ensureLine(s, RECORDING_SOURCE, trackColor, width = 4f)
             TrackLayers.ensurePoints(s, FOLLOWED_WAYPOINTS_SOURCE, followedWaypointColor)
             TrackLayers.ensurePoints(s, MOMENTS_SOURCE, trackColor)
+            TrackLayers.ensureDashedLine(s, STRAIGHT_SOURCE, routeColor, width = 2f)
+            TrackLayers.ensureLine(s, ROUTE_SOURCE, routeColor, width = 5f)
+            TrackLayers.ensurePoints(s, DESTINATION_SOURCE, routeColor)
             style = s
         }
     }
@@ -165,10 +199,14 @@ fun MapScreen(onRecordingFinished: (Long) -> Unit, lockedMode: Boolean = false) 
     // Redraw the recorded track at most every TRACK_REDRAW_MS: cheap even for a long ride.
     LaunchedEffect(style) {
         val s = style ?: return@LaunchedEffect
-        recorder.state.map { it.segments }.distinctUntilChanged().conflate().collect {
-            TrackLayers.setSegments(s, RECORDING_SOURCE, it)
-            delay(TRACK_REDRAW_MS)
-        }
+        // The clean track (#1795), recomputed from the raw fixes: same result live and after a restart.
+        combine(recorder.state.map { it.segments }.distinctUntilChanged(), smoothTrack) { segments, smooth -> segments to smooth }
+            .conflate()
+            .collect { (segments, smooth) ->
+                val shown = if (smooth) withContext(Dispatchers.Default) { cleanTrack.feed(segments) } else segments
+                TrackLayers.setSegments(s, RECORDING_SOURCE, shown)
+                delay(TRACK_REDRAW_MS)
+            }
     }
 
     // The imported track being followed, coloured by grade (#1742).
@@ -183,6 +221,37 @@ fun MapScreen(onRecordingFinished: (Long) -> Unit, lockedMode: Boolean = false) 
     val positionOnFollowed = remember(followed, recorderState.lastFix) {
         val fix = recorderState.lastFix
         if (followed == null || fix == null) null else TrackShape.locate(followed!!.segments, fix.lat, fix.lon)?.first
+    }
+
+    // A tap on the map: the way there along the paths, or the straight distance without segments.
+    LaunchedEffect(style, destination) {
+        val s = style ?: return@LaunchedEffect
+        val to = destination
+        TrackLayers.setSegments(s, ROUTE_SOURCE, emptyList())
+        TrackLayers.setSegments(s, STRAIGHT_SOURCE, emptyList())
+        if (to == null) {
+            route = null
+            TrackLayers.setPoints(s, DESTINATION_SOURCE, emptyList())
+            return@LaunchedEffect
+        }
+        TrackLayers.setPoints(s, DESTINATION_SOURCE, listOf(to.lat to to.lon))
+        val from = recorder.state.value.lastFix?.let { GeoPoint(it.lat, it.lon) }
+            ?: map?.locationComponent?.takeIf { it.isLocationComponentActivated }?.lastKnownLocation?.let { GeoPoint(it.latitude, it.longitude) }
+        if (from == null) {
+            route = RouteUi.NoPosition
+            return@LaunchedEffect
+        }
+        // The straight line at once, the way along the paths when found.
+        val straightM = GeoMath.distanceM(from.lat, from.lon, to.lat, to.lon)
+        TrackLayers.setSegments(s, STRAIGHT_SOURCE, listOf(listOf(Fix(0, from.lat, from.lon), Fix(0, to.lat, to.lon))))
+        route = RouteUi.Computing
+        when (val r = routing.route(from, to)) {
+            is RouteResult.Found -> {
+                route = RouteUi.Found(r.route, straightM)
+                TrackLayers.setSegments(s, ROUTE_SOURCE, listOf(r.route.points.map { Fix(0, it.lat, it.lon) }))
+            }
+            else -> route = RouteUi.Straight(straightM)
+        }
     }
 
     LaunchedEffect(style) {
@@ -208,8 +277,25 @@ fun MapScreen(onRecordingFinished: (Long) -> Unit, lockedMode: Boolean = false) 
             }
         }
 
+        Column(Modifier.align(Alignment.BottomCenter).fillMaxWidth().padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+        route?.let { state ->
+            RouteCard(
+                state = state,
+                onFollow = {
+                    val found = state as? RouteUi.Found ?: return@RouteCard
+                    val to = destination ?: return@RouteCard
+                    scope.launch {
+                        val name = context.getString(R.string.route_name, Format.dateTime(System.currentTimeMillis()))
+                        val trackId = tracks.saveRoute(name, found.route.points, to)
+                        if (recorderState.isActive) recorder.follow(trackId) else startRecording(followTrackId = trackId)
+                        destination = null
+                    }
+                },
+                onClose = { destination = null },
+            )
+        }
         Row(
-            Modifier.align(Alignment.BottomCenter).fillMaxWidth().padding(16.dp),
+            Modifier.fillMaxWidth(),
             horizontalArrangement = Arrangement.spacedBy(12.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
@@ -241,6 +327,7 @@ fun MapScreen(onRecordingFinished: (Long) -> Unit, lockedMode: Boolean = false) 
                     contentDescription = stringResource(R.string.map_recenter),
                 )
             }
+        }
         }
     }
 

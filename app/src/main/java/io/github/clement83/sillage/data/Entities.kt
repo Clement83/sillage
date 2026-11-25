@@ -190,7 +190,8 @@ data class ImportedWaypointEntity(
     val alt: Double?,
 )
 
-enum class ZoneKind { REGION, OUTING }
+/** A region's map, an outing's corridor, or a region's routing data (BRouter segments, #1733). */
+enum class ZoneKind { REGION, OUTING, ROUTING }
 
 enum class ZoneState { QUEUED, DOWNLOADING, READY, FAILED }
 
@@ -214,6 +215,8 @@ data class OfflineZoneEntity(
     @ColumnInfo(name = "total_tiles") val totalTiles: Int = 0,
     val bytes: Long = 0,
     val error: String? = null,
+    /** BRouter segments this zone needs (#1733), comma-separated names such as `E5_N40`. */
+    @ColumnInfo(defaultValue = "") val segments: String = "",
     @ColumnInfo(name = "created_at") val createdAt: Long,
     @ColumnInfo(name = "updated_at") val updatedAt: Long,
 )

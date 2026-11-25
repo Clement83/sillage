@@ -210,4 +210,25 @@
     <string name="offline_mobile_data">Télécharger aussi en données mobiles</string>
     <string name="offline_first">Toujours utiliser la carte téléchargée</string>
     <string name="offline_ready_outing">Carte hors ligne prête</string>
+    <string name="route_computing">Calcul de l\'itinéraire…</string>
+    <string name="route_no_position">Position inconnue. Attends le GPS.</string>
+    <string name="route_found">%1$s · D+ %2$s</string>
+    <string name="route_straight">%1$s à vol d\'oiseau</string>
+    <string name="route_close">Fermer l\'itinéraire</string>
+    <string name="route_name">Itinéraire du %1$s</string>
+    <string name="offline_map">Carte · %1$s</string>
+    <string name="offline_routing">Itinéraires · %1$s</string>
+    <string name="match_question">Tu étais à cette sortie ?</string>
+    <string name="match_title">%1$s à %2$s</string>
+    <string name="match_join">Joindre à la sortie</string>
+    <string name="match_solo">Créer une sortie solo</string>
+    <string name="match_skip">Ne pas synchroniser</string>
+    <string name="off_track">Hors trace · %1$s</string>
+    <string name="settings_off_track_title">Trace suivie</string>
+    <string name="settings_off_track_alert">Vibrer quand je quitte la trace</string>
+    <string name="settings_off_track_reminder">Me le rappeler toutes les 2 minutes</string>
+    <string name="settings_off_track_sound">Biper aussi</string>
+    <string name="settings_recording_title">Enregistrement</string>
+    <string name="settings_smooth_track">Lisser ma trace</string>
+    <string name="export_raw">Trace GPS brute</string>
 </resources>

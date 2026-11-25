@@ -33,11 +33,12 @@ object RecordingNotifications {
             Intent(context, MainActivity::class.java).addFlags(Intent.FLAG_ACTIVITY_SINGLE_TOP),
             PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT,
         )
-        val text = context.getString(
-            R.string.notification_recording_text,
-            Format.distance(state.distanceM),
-            Format.elevation(state.elevationGainM),
-        )
+        val text = state.offTrackM?.let { context.getString(R.string.off_track, Format.distance(it)) }
+            ?: context.getString(
+                R.string.notification_recording_text,
+                Format.distance(state.distanceM),
+                Format.elevation(state.elevationGainM),
+            )
         val builder = NotificationCompat.Builder(context, CHANNEL)
             .setSmallIcon(R.drawable.ic_stat_sillage)
             .setContentTitle(

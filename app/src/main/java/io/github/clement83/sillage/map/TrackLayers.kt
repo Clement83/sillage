@@ -34,6 +34,19 @@ object TrackLayers {
         if (below != null && style.getLayer(below) != null) style.addLayerBelow(layer, below) else style.addLayer(layer)
     }
 
+    /** A thin dashed line (the straight distance to a point, #1733). */
+    fun ensureDashedLine(style: Style, id: String, color: Int, width: Float) {
+        if (style.getSource(id) != null) return
+        style.addSource(GeoJsonSource(id))
+        style.addLayer(
+            LineLayer("$id-line", id).withProperties(
+                PropertyFactory.lineColor(color),
+                PropertyFactory.lineWidth(width),
+                PropertyFactory.lineDasharray(arrayOf(2f, 2f)),
+            ),
+        )
+    }
+
     /** A line coloured stretch by stretch from each feature's `color` property (grade colouring). */
     fun ensureGradedLine(style: Style, id: String, width: Float) {
         if (style.getSource(id) != null) return

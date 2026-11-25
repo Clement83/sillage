@@ -123,10 +123,39 @@ fun SoloOutingCard(recording: RecordingEntity) {
     val account by container.account.account.collectAsStateWithLifecycle(initialValue = null)
     val scope = rememberCoroutineScope()
     var confirm by rememberSaveable { mutableStateOf(false) }
-    if (account == null) return
+    // #1777: one of my outings of the day started within the hour of this ride? Then offer to join it.
+    val outings by container.outings.outings.collectAsStateWithLifecycle(initialValue = emptyList())
+    var dismissed by rememberSaveable { mutableStateOf(false) }
+    val server = account?.server
     val state = recording.uploadState
+    val unsynced = state == null || state == UploadState.CANCELLED
+    LaunchedEffect(recording.id, server, unsynced) {
+        if (server != null && unsynced) container.outings.syncAccount() // fresher list if online; the cache otherwise
+    }
+    val match = remember(outings, recording.startedAt, server) {
+        server?.let { SoloOutings.matchingOuting(recording.startedAt, outings, it) }
+    }
+    if (account == null) return
 
-    if (state == null || state == UploadState.CANCELLED) {
+    if (unsynced && match != null && !dismissed) {
+        Card(Modifier.fillMaxWidth()) {
+            Column(Modifier.padding(start = 12.dp, top = 12.dp, end = 4.dp, bottom = 4.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                Text(stringResource(R.string.match_question), style = MaterialTheme.typography.bodyMedium)
+                Text(
+                    stringResource(R.string.match_title, match.title, Format.timeOfDay(match.startsAt)),
+                    style = MaterialTheme.typography.titleSmall,
+                    maxLines = 2,
+                    overflow = TextOverflow.Ellipsis,
+                    modifier = Modifier.padding(end = 8.dp),
+                )
+                FlowRow(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(4.dp, Alignment.End)) {
+                    TextButton(onClick = { dismissed = true }) { Text(stringResource(R.string.match_skip)) }
+                    TextButton(onClick = { scope.launch { container.rides.makeOuting(recording.id) } }) { Text(stringResource(R.string.match_solo)) }
+                    Button(onClick = { scope.launch { container.rides.joinOuting(recording.id, match.id) } }) { Text(stringResource(R.string.match_join)) }
+                }
+            }
+        }
+    } else if (unsynced) {
         OutlinedButton(onClick = { confirm = true }, modifier = Modifier.fillMaxWidth()) {
             Icon(Icons.Outlined.Flag, contentDescription = null)
             Text(stringResource(R.string.solo_make), Modifier.padding(start = 8.dp))

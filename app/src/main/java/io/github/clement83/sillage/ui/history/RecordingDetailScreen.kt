@@ -1,5 +1,10 @@
 package io.github.clement83.sillage.ui.history
 
+import kotlinx.coroutines.withContext
+import kotlinx.coroutines.Dispatchers
+import androidx.compose.runtime.produceState
+import io.github.clement83.sillage.geo.CleanTrack
+import androidx.compose.material3.Checkbox
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -82,6 +87,13 @@ fun RecordingDetailScreen(recordingId: Long, onBack: () -> Unit) {
     val flow = remember(recordingId) { dao.observe(recordingId) }
     val recording by flow.collectAsStateWithLifecycle(initialValue = null)
     var segments by remember { mutableStateOf<List<List<Fix>>>(emptyList()) }
+    // The clean track (#1795) is shown and exported; the raw fixes stay one tick away in the export menu.
+    val smooth by appContainer().settings.smoothTrack.collectAsStateWithLifecycle(initialValue = true)
+    val container = appContainer()
+    val shown by produceState(segments, segments, smooth) {
+        value = if (smooth) withContext(Dispatchers.Default) { CleanTrack(container::trailSnapper).feed(segments) } else segments
+    }
+    var exportRaw by rememberSaveable { mutableStateOf(false) }
     var confirmDelete by rememberSaveable { mutableStateOf(false) }
     val momentsFlow = remember(recordingId) { dao.observeKeyMoments(recordingId) }
     val moments by momentsFlow.collectAsStateWithLifecycle(initialValue = emptyList())
@@ -99,7 +111,7 @@ fun RecordingDetailScreen(recordingId: Long, onBack: () -> Unit) {
         val track = ExportTrack(
             name = name,
             startedAt = rec.startedAt,
-            segments = segments,
+            segments = if (exportRaw) segments else shown,
             waypoints = moments.mapIndexed { i, m ->
                 ExportWaypoint(m.time, m.lat, m.lon, m.alt, m.label ?: defaultMomentName.format(i + 1))
             },
@@ -161,10 +173,10 @@ fun RecordingDetailScreen(recordingId: Long, onBack: () -> Unit) {
         val s = style ?: return@LaunchedEffect
         TrackLayers.setPoints(s, MOMENTS_SOURCE, moments.map { it.lat to it.lon })
     }
-    LaunchedEffect(style, segments) {
+    LaunchedEffect(style, shown) {
         val s = style ?: return@LaunchedEffect
-        TrackLayers.setSegments(s, TRACK_SOURCE, segments)
-        TrackLayers.fit(mapView.awaitMap(), segments, paddingPx)
+        TrackLayers.setSegments(s, TRACK_SOURCE, shown)
+        TrackLayers.fit(mapView.awaitMap(), shown, paddingPx)
     }
 
     Column(Modifier.fillMaxSize()) {
@@ -205,7 +217,13 @@ fun RecordingDetailScreen(recordingId: Long, onBack: () -> Unit) {
                 HorizontalDivider()
             }
             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp, Alignment.End)) {
-                ExportMenu(enabled = recording != null && segments.isNotEmpty(), onShare = ::share, onSave = ::save)
+                ExportMenu(
+                    enabled = recording != null && segments.isNotEmpty(),
+                    raw = if (smooth) exportRaw else null,
+                    onRawChange = { exportRaw = it },
+                    onShare = ::share,
+                    onSave = ::save,
+                )
                 OutlinedButton(onClick = { confirmDelete = true }) {
                     Icon(Icons.Outlined.Delete, contentDescription = null)
                     Text(stringResource(R.string.recording_delete), Modifier.padding(start = 8.dp))
@@ -279,7 +297,13 @@ private fun RenameKeyMomentDialog(initial: String, onSave: (String) -> Unit, onD
 }
 
 @Composable
-private fun ExportMenu(enabled: Boolean, onShare: (ExportFormat) -> Unit, onSave: (ExportFormat) -> Unit) {
+private fun ExportMenu(
+    enabled: Boolean,
+    raw: Boolean?,
+    onRawChange: (Boolean) -> Unit,
+    onShare: (ExportFormat) -> Unit,
+    onSave: (ExportFormat) -> Unit,
+) {
     var open by remember { mutableStateOf(false) }
     MenuAnchor {
         Button(onClick = { open = true }, enabled = enabled) {
@@ -287,6 +311,14 @@ private fun ExportMenu(enabled: Boolean, onShare: (ExportFormat) -> Unit, onSave
             Text(stringResource(R.string.export), Modifier.padding(start = 8.dp))
         }
         DropdownMenu(expanded = open, onDismissRequest = { open = false }) {
+            // Only when the track is smoothed: the raw fixes instead (#1795).
+            raw?.let { checked ->
+                DropdownMenuItem(
+                    text = { Text(stringResource(R.string.export_raw)) },
+                    leadingIcon = { Checkbox(checked = checked, onCheckedChange = null) },
+                    onClick = { onRawChange(!checked) },
+                )
+            }
             ExportFormat.entries.forEach { format ->
                 DropdownMenuItem(
                     text = { Text(stringResource(R.string.export_share_as, format.name)) },
