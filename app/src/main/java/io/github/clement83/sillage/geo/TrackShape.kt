@@ -17,7 +17,7 @@ object TrackShape {
 
     /** Same hysteresis as a recording, so a followed track and the ride on it compare fairly. */
     fun elevationGainM(segments: List<List<GeoPoint>>): Double {
-        val stats = TrackStats(minStepM = 0.0)
+        val stats = TrackStats.raw(minStepM = 0.0)
         var t = 0L
         segments.forEach { seg ->
             seg.forEachIndexed { i, p -> stats.add(Fix(t++, p.lat, p.lon, p.alt), newSegment = i == 0) }

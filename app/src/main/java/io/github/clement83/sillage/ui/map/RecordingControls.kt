@@ -172,7 +172,6 @@ fun StopConfirmDialog(onConfirm: () -> Unit, onDismiss: () -> Unit) {
     AlertDialog(
         onDismissRequest = onDismiss,
         title = { Text(stringResource(R.string.recording_stop_title)) },
-        text = { Text(stringResource(R.string.recording_stop_body)) },
         confirmButton = { TextButton(onClick = onConfirm) { Text(stringResource(R.string.recording_stop_confirm)) } },
         dismissButton = { TextButton(onClick = onDismiss) { Text(stringResource(R.string.cancel)) } },
     )

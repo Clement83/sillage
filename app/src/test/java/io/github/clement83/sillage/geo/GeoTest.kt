@@ -92,7 +92,7 @@ class TrackStatsTest {
 
     @Test
     fun `ignores altitude noise below the threshold`() {
-        val stats = TrackStats()
+        val stats = TrackStats.raw()
         listOf(100.0, 103.0, 97.0, 103.0, 98.0, 104.0, 100.0).forEachIndexed { i, alt ->
             stats.add(north(start, i * 5.0, i.toLong(), alt))
         }
@@ -101,11 +101,41 @@ class TrackStatsTest {
 
     @Test
     fun `counts real climbs, not descents`() {
-        val stats = TrackStats()
+        val stats = TrackStats.raw()
         listOf(100.0, 104.0, 108.0, 120.0, 90.0, 80.0, 95.0).forEachIndexed { i, alt ->
             stats.add(north(start, i * 5.0, i.toLong(), alt))
         }
         // 100 → 108 → 120 (+20), down to 80, then → 95 (+15)
         assertEquals(35.0, stats.elevationGainM, 1e-9)
+    }
+
+    /** One fix a second along a line, with the altitude given for each second. */
+    private fun ride(stats: TrackStats, alts: List<Double>) =
+        alts.forEachIndexed { i, alt -> stats.add(north(start, i * 4.0, i.toLong(), alt)) }
+
+    @Test
+    fun `GPS altitude, the wild start of a segment is not a climb`() {
+        // Seen on a real ride: right after a resume, 108 → 177 → 44 m in 20 s, then flat around 85 m.
+        val warmUp = listOf(108.0, 177.0, 168.0, 151.0, 104.0, 90.0, 73.0, 62.0, 59.0, 46.0, 44.0, 56.0, 58.0, 66.0, 76.0)
+        val stats = TrackStats()
+        ride(stats, warmUp + List(300) { 85.0 })
+        assertEquals(0.0, stats.elevationGainM, 1e-9)
+    }
+
+    @Test
+    fun `GPS altitude, noise and spikes on a flat ride add almost nothing`() {
+        val noise = List(600) { i -> 85.0 + 9 * kotlin.math.sin(i / 1.6) + (if (i % 97 == 50) 40.0 else 0.0) }
+        val stats = TrackStats()
+        ride(stats, noise)
+        assertTrue("gain ${stats.elevationGainM}", stats.elevationGainM < 6.0)
+    }
+
+    @Test
+    fun `GPS altitude, a real climb is counted`() {
+        // 100 m climbed at 0.5 m/s, with ±4 m of noise, then a rest at the top.
+        val climb = List(60) { 100.0 } + List(200) { i -> 100.0 + i * 0.5 + if (i % 2 == 0) 4.0 else -4.0 } + List(150) { 200.0 }
+        val stats = TrackStats()
+        ride(stats, climb)
+        assertEquals(100.0, stats.elevationGainM, 6.0)
     }
 }

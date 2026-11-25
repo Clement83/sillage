@@ -59,6 +59,12 @@ interface RecordingDao {
     @Query("UPDATE recording SET outing_id = :outingId WHERE id = :id")
     suspend fun setOuting(id: Long, outingId: Long)
 
+    @Query("SELECT * FROM recording WHERE status = 'FINISHED'")
+    suspend fun finished(): List<RecordingEntity>
+
+    @Query("UPDATE recording SET distance_m = :distanceM, elevation_gain_m = :elevationGainM WHERE id = :id")
+    suspend fun setStats(id: Long, distanceM: Double, elevationGainM: Double)
+
     @Query("DELETE FROM recording WHERE id = :id")
     suspend fun delete(id: Long)
 

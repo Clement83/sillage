@@ -4,6 +4,7 @@ import android.content.Context
 import androidx.datastore.core.DataStore
 import androidx.datastore.preferences.core.Preferences
 import androidx.datastore.preferences.core.booleanPreferencesKey
+import androidx.datastore.preferences.core.intPreferencesKey
 import androidx.datastore.preferences.core.edit
 import androidx.datastore.preferences.core.stringPreferencesKey
 import androidx.datastore.preferences.preferencesDataStore
@@ -54,7 +55,15 @@ class SettingsRepository(context: Context) {
         store.edit { it[OFFLINE_MOBILE_DATA] = enabled }
     }
 
+    /** Version of the distance and climb computation the stored rides were counted with. */
+    val statsVersion: Flow<Int> = store.data.map { it[STATS_VERSION] ?: 1 }
+
+    suspend fun setStatsVersion(version: Int) {
+        store.edit { it[STATS_VERSION] = version }
+    }
+
     private companion object {
+        val STATS_VERSION = intPreferencesKey("stats_version")
         val SERVER_URL = stringPreferencesKey("server_url")
         val LOCK_SCREEN_MAP = booleanPreferencesKey("lock_screen_map")
         val OFFLINE_FIRST = booleanPreferencesKey("offline_first")

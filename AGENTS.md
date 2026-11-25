@@ -53,6 +53,8 @@ nécessaire.
 - Tous les textes visibles passent par `strings.xml` : anglais dans `values/`, français dans
   `values-fr/`. Toute nouvelle chaîne existe dans les deux.
 - Le français tutoie l'utilisateur.
+- Tout texte visible suit le skill `ux-writing` (`.claude/skills/ux-writing/`) : court, sans détail technique
+  ni adresse de serveur, boutons « verbe + objet », erreurs « ce qui s'est passé + quoi faire ».
 - README, commentaires de code et messages de commit en anglais.
 
 ## Appareil de test

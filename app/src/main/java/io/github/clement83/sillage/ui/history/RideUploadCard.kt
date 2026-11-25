@@ -30,7 +30,6 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
-import androidx.core.net.toUri
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import io.github.clement83.sillage.R
 import io.github.clement83.sillage.data.RecordingEntity
@@ -113,7 +112,8 @@ fun RideUploadCard(recording: RecordingEntity) {
 }
 
 /**
- * A ride off any outing, with a paired account (#1766): "Make it a private outing", then its state.
+ * A ride off any outing, with a paired account (#1766): "Sync with singletrack" (a private solo
+ * outing), then its state.
  * Once made, the ride is on that outing and [RideUploadCard] takes over.
  */
 @Composable
@@ -123,7 +123,7 @@ fun SoloOutingCard(recording: RecordingEntity) {
     val account by container.account.account.collectAsStateWithLifecycle(initialValue = null)
     val scope = rememberCoroutineScope()
     var confirm by rememberSaveable { mutableStateOf(false) }
-    val server = account?.server ?: return
+    if (account == null) return
     val state = recording.uploadState
 
     if (state == null || state == UploadState.CANCELLED) {
@@ -163,12 +163,11 @@ fun SoloOutingCard(recording: RecordingEntity) {
         AlertDialog(
             onDismissRequest = { confirm = false },
             title = { Text(stringResource(R.string.solo_confirm_title)) },
-            text = { Text(stringResource(R.string.solo_confirm_body, server.toUri().host ?: server)) },
             confirmButton = {
                 TextButton(onClick = {
                     confirm = false
                     scope.launch { container.rides.makeOuting(recording.id) }
-                }) { Text(stringResource(R.string.solo_create)) }
+                }) { Text(stringResource(R.string.solo_sync)) }
             },
             dismissButton = { TextButton(onClick = { confirm = false }) { Text(stringResource(R.string.cancel)) } },
         )
@@ -185,5 +184,5 @@ private fun uploadError(code: String?): String = when (code) {
     RideUploads.ERROR_NOT_FOUND -> stringResource(R.string.outing_gone)
     RideUploads.ERROR_UNAUTHORIZED -> stringResource(R.string.ride_error_unauthorized)
     RideUploads.ERROR_NO_ACCESS -> stringResource(R.string.ride_error_no_access)
-    else -> stringResource(R.string.ride_error_other, code.orEmpty())
+    else -> stringResource(R.string.ride_error_other)
 }

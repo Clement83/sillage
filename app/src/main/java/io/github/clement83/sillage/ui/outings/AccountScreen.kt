@@ -105,7 +105,7 @@ fun AccountScreen(qrServer: String?, qrCode: String?, onBack: () -> Unit, onScan
             val paired = account
             if (paired != null) {
                 Text(
-                    stringResource(R.string.account_paired, paired.server, Format.dateTime(paired.pairedAt)),
+                    stringResource(R.string.account_paired, Format.dateTime(paired.pairedAt)),
                     style = MaterialTheme.typography.bodyLarge,
                 )
                 OutlinedButton(onClick = { confirmUnpair = true }) { Text(stringResource(R.string.account_unpair)) }

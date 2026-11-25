@@ -140,7 +140,7 @@ private fun AccountSection(onAccount: () -> Unit) {
     val account by appContainer().account.account.collectAsStateWithLifecycle(initialValue = null)
     Section(R.string.account_title) {
         Text(
-            account?.let { stringResource(R.string.account_paired, it.server, Format.dateTime(it.pairedAt)) }
+            account?.let { stringResource(R.string.account_paired, Format.dateTime(it.pairedAt)) }
                 ?: stringResource(R.string.settings_account_unpaired),
             style = MaterialTheme.typography.bodyMedium,
         )
